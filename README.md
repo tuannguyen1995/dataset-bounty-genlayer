@@ -156,8 +156,8 @@ Deploy the generated `dist/` directory to Vercel or Netlify.
 
 ## 🎥 Demo Video & Live dApp
 
-- **Live Web App**: [https://dataset-bounty.vercel.app](https://dataset-bounty.vercel.app) *(Replace with your Vercel deployment link)*
-- **Demo Video Video**: [https://youtube.com/watch?v=dataset_bounty_demo](https://youtube.com/watch?v=dataset_bounty_demo) *(Replace with your YouTube / Loom video)*
+- **Live Web App (Vercel)**: [https://dataset-bounty.vercel.app](https://dataset-bounty.vercel.app)
+- **GitHub Repository**: [https://github.com/tuannguyen1995/DatasetBounty](https://github.com/tuannguyen1995/DatasetBounty)
 - **GenLayer Studionet Contract**: `0x5FbDB2315678afecb367f032d93F642f64180aa3`
 
 ---
