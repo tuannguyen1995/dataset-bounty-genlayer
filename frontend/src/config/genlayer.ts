@@ -1,7 +1,7 @@
 import { createClient, chains } from 'genlayer-js';
 import { DatasetTask } from '../types/bounty';
 
-export const DEFAULT_CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+export const DEFAULT_CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be";
 export const STUDIONET_RPC = "https://studio.genlayer.com/api";
 
 export const studionetChain = chains?.studionet || {

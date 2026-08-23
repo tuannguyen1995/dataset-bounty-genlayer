@@ -1,4 +1,4 @@
-# ⚡ DatasetBounty: Decentralized AI Dataset Verification & License Compliance Escrow
+# ⚡ dataset-bounty-genlayer: Decentralized AI Dataset Verification & License Compliance Escrow
 
 > **GenLayer Builder Score Target: 5 / 5 ⭐**  
 > *Autonomous AI Data Quality Auditing, Licensing Verification & Staking Escrow powered by GenLayer Intelligent Contracts.*
@@ -7,7 +7,7 @@
 
 ## 🌟 Overview & Key Features
 
-**DatasetBounty** is a decentralized protocol built on **GenLayer (v0.2.18)** that connects AI labs (Buyers) with data engineers and annotators (Contributors). By leveraging GenLayer's non-deterministic execution environment, DatasetBounty automatically audits sample dataset quality, verifies schema compliance, detects blacklisted source artifacts, and enforces open-source licensing compliance before releasing escrow payments.
+**dataset-bounty-genlayer** is a decentralized protocol built on **GenLayer (v0.2.18)** that connects AI labs (Buyers) with data engineers and annotators (Contributors). By leveraging GenLayer's non-deterministic execution environment, dataset-bounty-genlayer automatically audits sample dataset quality, verifies schema compliance, detects blacklisted source artifacts, and enforces open-source licensing compliance before releasing escrow payments.
 
 ### Key Architectural Highlights:
 1. **Intelligent Contract Quality Audit (`gl.nondet.exec_prompt`)**: Non-deterministic LLM Leader-Validator consensus evaluates submitted dataset previews against the buyer's criteria.
@@ -63,35 +63,36 @@ sequenceDiagram
 ## 📂 Repository Structure
 
 ```
-DatasetBounty/
+dataset-bounty-genlayer/
 ├── contracts/
 │   └── DatasetBounty.py       # GenLayer v0.2.18 Intelligent Contract
 ├── tests/
 │   └── test_dataset_bounty.py # Python unittest suite (4/4 passed)
 ├── scripts/
 │   └── verify_contract.py    # GenLayer AST & Non-Deterministic feature auditor
-├── src/
-│   ├── components/
-│   │   ├── Header.tsx                 # Web3 wallet & contract config navbar
-│   │   ├── StatsOverview.tsx          # Metrics & escrow lock dashboard
-│   │   ├── BountyCard.tsx             # Task cards with 24h cooling-off countdown
-│   │   ├── CreateBountyModal.tsx      # Payable bounty publication modal
-│   │   ├── BountyDetailModal.tsx      # Comprehensive task breakdown & arbitration
-│   │   ├── DatasetPreviewDrawer.tsx   # JSONL/CSV preview drawer
-│   │   ├── ConsensusFeed.tsx          # Live GenLayer AI Leader-Validator feed
-│   │   └── DisputeModal.tsx           # Dispute submission modal
-│   ├── config/
-│   │   └── genlayer.ts                # genlayer-js EIP-1193 MetaMask client
-│   ├── types/
-│   │   └── bounty.ts                  # TypeScript interface definitions
-│   ├── App.tsx                        # Main React application shell
-│   ├── main.tsx                       # Entry point
-│   └── index.css                      # Tailwind styling & cybernetic glow theme
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── tsconfig.json
-├── vite.config.ts
+├── frontend/
+│   ├── .env                           # VITE_CONTRACT_ADDRESS environment variable
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Header.tsx             # Web3 wallet & contract config navbar
+│   │   │   ├── BountyCard.tsx         # Task cards with 24h cooling-off countdown
+│   │   │   ├── CreateBountyModal.tsx  # Payable bounty publication modal
+│   │   │   ├── BountyDetailModal.tsx  # Comprehensive task breakdown & arbitration
+│   │   │   ├── DatasetPreviewDrawer.tsx # JSONL/CSV preview drawer
+│   │   │   ├── ConsensusFeed.tsx      # Live GenLayer AI Leader-Validator feed
+│   │   │   └── DisputeModal.tsx       # Dispute submission modal
+│   │   ├── config/
+│   │   │   └── genlayer.ts            # genlayer-js EIP-1193 MetaMask client
+│   │   ├── types/
+│   │   │   └── bounty.ts              # TypeScript interface definitions
+│   │   ├── App.tsx                    # Main React application shell
+│   │   ├── main.tsx                   # Entry point
+│   │   └── index.css                  # Tailwind styling & cybernetic glow theme
+│   ├── index.html
+│   ├── package.json
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   └── vite.config.ts
 └── README.md                          # GenLayer Portal Documentation
 ```
 
@@ -123,42 +124,11 @@ python scripts/verify_contract.py
 
 ---
 
-## 🚀 Frontend Quick Start & Deployment
+## 🌐 Deployed Contract & Live App
 
-### Prerequisites
-- Node.js >= 18.0.0
-- MetaMask Browser Extension (connected to GenLayer Studionet)
-
-### 1. Local Development
-```bash
-# Install dependencies
-npm install
-
-# Start local Vite dev server
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### 2. GenLayer Studionet Network Configuration
-- **Network Name**: GenLayer Studionet
-- **RPC URL**: `https://studio.genlayer.com/api`
-- **Chain ID**: `61998` (or custom Studionet ID)
-- **Currency Symbol**: `GEN`
-
-### 3. Vercel / Netlify Deployment
-```bash
-# Build production bundle
-npm run build
-```
-Deploy the generated `dist/` directory to Vercel or Netlify.
-
----
-
-## 🎥 Demo Video & Live dApp
-
-- **Live Web App (Vercel)**: [https://dataset-bounty.vercel.app](https://dataset-bounty.vercel.app)
-- **GitHub Repository**: [https://github.com/tuannguyen1995/DatasetBounty](https://github.com/tuannguyen1995/DatasetBounty)
-- **GenLayer Studionet Contract**: `0x5FbDB2315678afecb367f032d93F642f64180aa3`
+- **Live Web App**: [https://dataset-bounty-genlayer.vercel.app](https://dataset-bounty-genlayer.vercel.app)
+- **Deployed Contract (Studionet)**: `0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be`
+- **GenLayer Explorer**: [https://genlayer-explorer.vercel.app/address/0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be](https://genlayer-explorer.vercel.app/address/0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be)
 
 ---
 
