@@ -124,11 +124,12 @@ python scripts/verify_contract.py
 
 ---
 
-## 🌐 Deployed Contract & Live App
+## Live App
+https://dataset-bounty-genlayer.vercel.app
 
-- **Live Web App**: [https://dataset-bounty-genlayer.vercel.app](https://dataset-bounty-genlayer.vercel.app)
-- **Deployed Contract (Studionet)**: `0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be`
-- **GenLayer Explorer**: [https://genlayer-explorer.vercel.app/address/0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be](https://genlayer-explorer.vercel.app/address/0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be)
+## Deployed Contract
+- **Address**: `0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be`
+- **GenLayer Explorer**: https://genlayer-explorer.vercel.app/address/0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be
 
 ---
 
