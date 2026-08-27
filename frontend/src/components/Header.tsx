@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, Wallet, Cpu, Settings, RefreshCw, Layers, Sparkles, Terminal } from 'lucide-react';
-import { getContractAddress, setContractAddress } from '../config/genlayer';
+import { Shield, Wallet, Cpu, Settings, RefreshCw, Layers, Sparkles, Terminal, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { getContractAddress, setContractAddress, isSimulationModeEnabled, setSimulationModeEnabled } from '../config/genlayer';
 
 interface HeaderProps {
   account: string | null;
@@ -9,6 +9,9 @@ interface HeaderProps {
   isLoading: boolean;
   isAdmin: boolean;
   setIsAdmin: (val: boolean) => void;
+  simulationMode: boolean;
+  setSimulationMode: (val: boolean) => void;
+  readError: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,7 +20,10 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   isLoading,
   isAdmin,
-  setIsAdmin
+  setIsAdmin,
+  simulationMode,
+  setSimulationMode,
+  readError
 }) => {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [addressInput, setAddressInput] = useState(getContractAddress());
@@ -26,6 +32,13 @@ export const Header: React.FC<HeaderProps> = ({
     e.preventDefault();
     setContractAddress(addressInput);
     setShowConfigModal(false);
+    onRefresh();
+  };
+
+  const handleToggleSimulation = () => {
+    const nextVal = !simulationMode;
+    setSimulationModeEnabled(nextVal);
+    setSimulationMode(nextVal);
     onRefresh();
   };
 
@@ -55,17 +68,34 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Quick Toolbar */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5">
             
-            {/* Studionet Live Status Badge */}
-            <div className="hidden lg:flex items-center space-x-2 bg-obsidian-900 border border-obsidian-800 px-3 py-1.5 rounded-xl text-xs font-mono">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-slate-400">Node:</span>
-              <span className="text-emerald-400 font-bold">Studionet RPC</span>
-            </div>
+            {/* Authoritative vs Simulation Mode Indicator */}
+            {!simulationMode ? (
+              <div className="hidden lg:flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-mono">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-slate-300">State:</span>
+                <span className="text-emerald-400 font-bold">On-Chain Authoritative</span>
+              </div>
+            ) : (
+              <div className="hidden lg:flex items-center space-x-2 bg-amber-950/40 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-mono text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Dev Simulation Mode</span>
+              </div>
+            )}
+
+            {/* Dev Mode Simulation Toggle Switch */}
+            <button
+              onClick={handleToggleSimulation}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-semibold border transition-all ${
+                simulationMode
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                  : 'bg-obsidian-900 text-slate-400 border-obsidian-800 hover:text-slate-200'
+              }`}
+              title="Explicit Dev-Only Simulation Toggle"
+            >
+              <span>{simulationMode ? 'Sim Mode: ON' : 'Dev Sim: OFF'}</span>
+            </button>
 
             {/* Sync State Button */}
             <button
@@ -91,12 +121,12 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsAdmin(!isAdmin)}
               className={`px-3 py-1.5 rounded-xl text-xs font-mono font-semibold border transition-all flex items-center space-x-1.5 ${
                 isAdmin
-                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/40 shadow-amber-glow'
+                  ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/40 shadow-indigo-glow'
                   : 'bg-obsidian-900 text-slate-400 border-obsidian-800 hover:text-slate-200'
               }`}
             >
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>{isAdmin ? 'Admin Mode: ACTIVE' : 'User Mode'}</span>
+              <Shield className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{isAdmin ? 'Admin: ON' : 'User'}</span>
             </button>
 
             {/* Connect Wallet / Profile */}
@@ -111,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs px-4 py-2 rounded-xl shadow-emerald-glow transition-all active:scale-95"
               >
                 <Wallet className="w-4 h-4 stroke-[2.5]" />
-                <span>Connect MetaMask</span>
+                <span>Connect Wallet</span>
               </button>
             )}
 
@@ -119,6 +149,22 @@ export const Header: React.FC<HeaderProps> = ({
 
         </div>
       </header>
+
+      {/* Prominent Read Error Banner in Normal Operation if contract read fails */}
+      {readError && !simulationMode && (
+        <div className="bg-rose-950/90 border-b border-rose-500/50 px-4 py-2 text-xs font-mono text-rose-200 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span><strong>Contract Read Failure:</strong> {readError}</span>
+          </div>
+          <button
+            onClick={handleToggleSimulation}
+            className="underline font-bold text-amber-300 hover:text-amber-200 ml-4 shrink-0"
+          >
+            Enable Dev Simulation Mode
+          </button>
+        </div>
+      )}
 
       {/* Contract Address Config Modal */}
       {showConfigModal && (

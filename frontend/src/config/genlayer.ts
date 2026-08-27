@@ -19,13 +19,33 @@ export const studionetChain = chains?.studionet || {
   }
 };
 
-// Helper to retrieve configured contract address from localStorage or fallback
+// Check if explicit Development Simulation Mode is enabled
+export function isSimulationModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const envFlag = import.meta.env.VITE_ENABLE_SIMULATION === 'true';
+  const localFlag = localStorage.getItem('dataset_bounty_simulation_mode');
+  if (localFlag !== null) {
+    return localFlag === 'true';
+  }
+  return envFlag; // Default false in normal operation
+}
+
+export function setSimulationModeEnabled(val: boolean): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('dataset_bounty_simulation_mode', val ? 'true' : 'false');
+  }
+}
+
+// Helper to retrieve configured contract address
 export function getContractAddress(): string {
+  if (typeof window === 'undefined') return DEFAULT_CONTRACT_ADDRESS;
   return localStorage.getItem('dataset_bounty_contract_address') || DEFAULT_CONTRACT_ADDRESS;
 }
 
 export function setContractAddress(address: string): void {
-  localStorage.setItem('dataset_bounty_contract_address', address.trim());
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('dataset_bounty_contract_address', address.trim());
+  }
 }
 
 // Initialize GenLayer Web3 Client with EIP-1193 window.ethereum provider
@@ -41,14 +61,14 @@ export function getGenLayerClient() {
     }
   }
   
-  // Fallback simulator/read-only client
+  // Read-only client for fetching contract state
   return createClient({
     chain: studionetChain as any,
     endpoint: STUDIONET_RPC,
   });
 }
 
-// Initial mock tasks for standalone UI preview when contract is not yet deployed on Studionet
+// Initial mock tasks for explicit development simulation mode ONLY
 export const INITIAL_MOCK_TASKS: DatasetTask[] = [
   {
     id: "bounty_python_code_eval_01",
@@ -65,7 +85,7 @@ export const INITIAL_MOCK_TASKS: DatasetTask[] = [
     reason: "100% Schema match. Verified MIT license metadata across all 10,000 function pairs. Zero blacklisted artifacts detected.",
     confidence: "98",
     attempts: "1",
-    payout_ready_at: String(Math.floor(Date.now() / 1000) + 72000), // 20 hours remaining
+    payout_ready_at: String(Math.floor(Date.now() / 1000) + 72000),
     disputed_at: "0"
   },
   {
@@ -134,43 +154,38 @@ export async function executeContractWrite(
   const client = getGenLayerClient();
   
   if (!client || !(window as any).ethereum) {
-    throw new Error("MetaMask or EIP-1193 Web3 provider not detected. Please install MetaMask to interact with GenLayer Studionet.");
+    throw new Error("MetaMask or EIP-1193 Web3 provider not detected. Please install and connect MetaMask to interact with GenLayer Studionet.");
   }
 
-  // Request account access if needed
   const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
   if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Web3 wallet found.");
+    throw new Error("No connected Web3 account found. Please connect your wallet.");
   }
 
   console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN`);
 
-  try {
-    // 1. Write Contract call
-    const txHash = await (client as any).writeContract({
-      address: contractAddress,
-      functionName: methodName,
-      args: args,
-      value: valueInGen,
-    });
+  // Write Contract call
+  const txHash = await (client as any).writeContract({
+    address: contractAddress,
+    functionName: methodName,
+    args: args,
+    value: valueInGen,
+  });
 
-    console.log(`[GenLayer Tx] Transaction submitted. Hash: ${txHash}. Waiting for Studionet finality receipt...`);
+  console.log(`[GenLayer Tx] Transaction submitted. Hash: ${txHash}. Waiting for Studionet finality receipt...`);
 
-    // 2. MUST WAITING FOR RECEIPT FINALITY as required by GenLayer specification
-    const receipt = await (client as any).waitForTransactionReceipt({ hash: txHash });
-    console.log(`[GenLayer Tx] Finality receipt confirmed:`, receipt);
+  // MUST WAIT FOR RECEIPT FINALITY as required by GenLayer specification
+  const receipt = await (client as any).waitForTransactionReceipt({ hash: txHash });
+  console.log(`[GenLayer Tx] Finality receipt confirmed:`, receipt);
 
-    return receipt;
-  } catch (error: any) {
-    console.error(`[GenLayer Tx Error] ${methodName} failed:`, error);
-    throw new Error(error?.message || `Transaction failed during ${methodName}`);
-  }
+  return receipt;
 }
 
-// Fetch all dataset bounty tasks from contract or return fallback mock
+// Fetch all dataset bounty tasks strictly from contract (authoritative state)
 export async function fetchAllTasks(contractAddress: string = getContractAddress()): Promise<DatasetTask[]> {
+  const client = getGenLayerClient();
+  
   try {
-    const client = getGenLayerClient();
     const resultJson = await (client as any).readContract({
       address: contractAddress,
       functionName: 'get_all_tasks',
@@ -179,25 +194,38 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
 
     if (typeof resultJson === 'string') {
       const parsed = JSON.parse(resultJson);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed; // Contract-derived state is authoritative
       }
+    } else if (Array.isArray(resultJson)) {
+      return resultJson;
     }
-  } catch (e) {
-    console.warn("Could not read from contract (falling back to mock state):", e);
+  } catch (e: any) {
+    console.error(`[Contract Read Failure] get_all_tasks on ${contractAddress} failed:`, e);
+
+    // ONLY fallback to mock data if Development Simulation Mode is explicitly enabled!
+    if (isSimulationModeEnabled()) {
+      console.warn("[Development Mode] Falling back to local mock simulation state.");
+      const localSaved = localStorage.getItem('dataset_bounty_tasks');
+      if (localSaved) {
+        try { return JSON.parse(localSaved); } catch (_) {}
+      }
+      return INITIAL_MOCK_TASKS;
+    }
+
+    // In normal operation, throw explicit error - do NOT fabricate mock state!
+    throw new Error(`Failed to read authoritative contract state from address ${contractAddress}: ${e?.message || 'RPC Read Failed'}`);
   }
 
-  // Check if we have stored state in localStorage from UI actions
-  const localSaved = localStorage.getItem('dataset_bounty_tasks');
-  if (localSaved) {
-    try {
-      return JSON.parse(localSaved);
-    } catch (_) {}
+  // If contract returns empty string / unexpected structure in normal mode:
+  if (isSimulationModeEnabled()) {
+    return INITIAL_MOCK_TASKS;
   }
-
-  return INITIAL_MOCK_TASKS;
+  return [];
 }
 
 export function saveLocalTasks(tasks: DatasetTask[]): void {
-  localStorage.setItem('dataset_bounty_tasks', JSON.stringify(tasks));
+  if (isSimulationModeEnabled()) {
+    localStorage.setItem('dataset_bounty_tasks', JSON.stringify(tasks));
+  }
 }
