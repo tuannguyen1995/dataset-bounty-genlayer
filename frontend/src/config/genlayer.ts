@@ -1,8 +1,9 @@
 import { createClient, chains } from 'genlayer-js';
 import { DatasetTask } from '../types/bounty';
 
-export const DEFAULT_CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be";
-export const STUDIONET_RPC = "https://studio.genlayer.com/api";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be";
+export const STUDIONET_RPC = import.meta.env.VITE_GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
+export const IS_DEV_MOCK = import.meta.env.VITE_ENABLE_DEV_MOCK === "true";
 
 export const studionetChain = chains?.studionet || {
   id: 61998,
@@ -19,10 +20,9 @@ export const studionetChain = chains?.studionet || {
   }
 };
 
-// Helper to retrieve configured contract address
 export function getContractAddress(): string {
-  if (typeof window === 'undefined') return DEFAULT_CONTRACT_ADDRESS;
-  return localStorage.getItem('dataset_bounty_contract_address') || DEFAULT_CONTRACT_ADDRESS;
+  if (typeof window === 'undefined') return CONTRACT_ADDRESS;
+  return localStorage.getItem('dataset_bounty_contract_address') || CONTRACT_ADDRESS;
 }
 
 export function setContractAddress(address: string): void {
@@ -51,65 +51,79 @@ export function getGenLayerClient() {
   });
 }
 
-// Execute Smart Contract Write Transaction with Finality Guarantee
+// 1. READ ON-CHAIN: Strictly fetch from contract (No fallback to mock when IS_DEV_MOCK is false)
+export async function fetchAllTasks(contractAddress: string = getContractAddress()): Promise<DatasetTask[]> {
+  if (IS_DEV_MOCK) {
+    console.warn("[DEV ONLY] Running in explicit mock simulation mode");
+  }
+
+  const client = getGenLayerClient();
+  
+  try {
+    const rawData = await (client as any).readContract({
+      address: contractAddress,
+      functionName: 'get_all_tasks',
+      args: []
+    });
+
+    if (!rawData) {
+      return [];
+    }
+
+    if (typeof rawData === 'string') {
+      const parsed = JSON.parse(rawData);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } else if (Array.isArray(rawData)) {
+      return rawData;
+    }
+
+    return [];
+  } catch (e: any) {
+    console.error(`[Contract Read Error] get_all_tasks on ${contractAddress} failed:`, e);
+    throw new Error(`Failed to read authoritative contract state: ${e?.message || 'RPC Read Failed'}`);
+  }
+}
+
+// 2. WRITE TRANSACTION: Must have finalized receipt before returning updated on-chain tasks
 export async function executeContractWrite(
   methodName: string,
   args: any[],
   valueInGen: bigint = BigInt(0),
   contractAddress: string = getContractAddress()
-): Promise<any> {
+): Promise<DatasetTask[]> {
   const client = getGenLayerClient();
   
   if (!client || !(window as any).ethereum) {
-    throw new Error("MetaMask or EIP-1193 Web3 provider not detected. Please connect MetaMask to interact with GenLayer Studionet.");
+    throw new Error("MetaMask is required to interact with GenLayer Studionet.");
   }
 
   const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
   if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Web3 account found. Please connect your wallet.");
+    throw new Error("No connected Web3 account found.");
   }
 
   console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN`);
 
-  // Write Contract call
-  const txHash = await (client as any).writeContract({
+  // Send Write Tx
+  const hash = await (client as any).writeContract({
     address: contractAddress,
     functionName: methodName,
     args: args,
     value: valueInGen,
   });
 
-  console.log(`[GenLayer Tx] Transaction submitted. Hash: ${txHash}. Waiting for Studionet finality receipt...`);
+  console.log(`[GenLayer Tx] Submitted. Hash: ${hash}. Waiting for Studionet finality receipt...`);
 
-  // MUST WAIT FOR RECEIPT FINALITY as required by GenLayer specification
-  const receipt = await (client as any).waitForTransactionReceipt({ hash: txHash });
+  // Wait for receipt confirmation from Studionet
+  const receipt = await (client as any).waitForTransactionReceipt({ hash });
   console.log(`[GenLayer Tx] Finality receipt confirmed:`, receipt);
 
-  return receipt;
-}
-
-// Fetch all dataset bounty tasks strictly from contract (100% On-Chain Authoritative State)
-export async function fetchAllTasks(contractAddress: string = getContractAddress()): Promise<DatasetTask[]> {
-  const client = getGenLayerClient();
-  
-  try {
-    const resultJson = await (client as any).readContract({
-      address: contractAddress,
-      functionName: 'get_all_tasks',
-      args: []
-    });
-
-    if (typeof resultJson === 'string') {
-      const parsed = JSON.parse(resultJson);
-      if (Array.isArray(parsed)) {
-        return parsed; // On-chain contract state is authoritative
-      }
-    } else if (Array.isArray(resultJson)) {
-      return resultJson;
-    }
-    return [];
-  } catch (e: any) {
-    console.error(`[Contract Read Error] get_all_tasks on ${contractAddress} failed:`, e);
-    throw new Error(`Failed to read authoritative contract state from address ${contractAddress}: ${e?.message || 'RPC Read Failed'}`);
+  if (receipt && receipt.status && receipt.status !== 'success' && receipt.status !== 1) {
+    throw new Error(`Transaction failed on-chain with status: ${receipt?.status || 'REVERTED'}`);
   }
+
+  // Refetch 100% authoritative state directly from contract to update UI
+  return await fetchAllTasks(contractAddress);
 }

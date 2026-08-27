@@ -58,7 +58,7 @@ export function App() {
         showToast(err?.message || "Failed to connect wallet", 'error');
       }
     } else {
-      showToast("MetaMask wallet not detected. Please install MetaMask to interact with GenLayer Studionet.", 'error');
+      showToast("MetaMask is required to interact with GenLayer Studionet.", 'error');
     }
   };
 
@@ -70,9 +70,9 @@ export function App() {
       setTasks(fetched);
     } catch (e: any) {
       console.error("[Contract Read Error]", e);
-      const errMsg = e?.message || "Failed to fetch authoritative state from GenLayer smart contract.";
+      const errMsg = e?.message || "Contract returned empty state or RPC error";
       setReadError(errMsg);
-      setTasks([]); // Contract state remains strictly authoritative
+      setTasks([]); // State remains strictly authoritative from on-chain
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +87,7 @@ export function App() {
     }
   }, []);
 
-  // 1. Create Bounty (100% On-Chain)
+  // 1. Create Bounty (100% On-Chain State Update)
   const handleCreateBounty = async (data: {
     taskId: string;
     escrowAmount: string;
@@ -96,52 +96,56 @@ export function App() {
     blacklistSources: string;
   }) => {
     setIsLoading(true);
+    setReadError(null);
     try {
       const escrowWei = BigInt(data.escrowAmount);
-      await executeContractWrite(
+      const updatedTasks = await executeContractWrite(
         'create_bounty',
         [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
         escrowWei
       );
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Bounty "${data.taskId}" successfully published on-chain!`, 'success');
       setShowCreateModal(false);
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Create Bounty Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Create bounty reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Create bounty action failed", 'error');
+      // Keep existing state on error, never mutate status locally
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Accept Bounty (100% On-Chain)
+  // 2. Accept Bounty (100% On-Chain State Update)
   const handleAcceptBounty = async (taskId: string, minStake: string) => {
     setIsLoading(true);
+    setReadError(null);
     try {
       const stakeWei = BigInt(minStake);
-      await executeContractWrite('accept_bounty', [taskId], stakeWei);
+      const updatedTasks = await executeContractWrite('accept_bounty', [taskId], stakeWei);
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Bounty "${taskId}" accepted with ${minStake} GEN stake!`, 'success');
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Accept Bounty Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Accept bounty reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Accept bounty action failed", 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 3. Submit Dataset Sample (100% On-Chain AI Audit)
+  // 3. Submit Dataset Sample (100% On-Chain State Update)
   const handleSubmitDatasetSample = async (taskId: string, datasetUrl: string) => {
     setIsLoading(true);
     setIsEvaluatingConsensus(true);
+    setReadError(null);
 
     try {
-      await executeContractWrite('submit_dataset', [taskId, datasetUrl]);
+      const updatedTasks = await executeContractWrite('submit_dataset', [taskId, datasetUrl]);
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Dataset sample submitted to GenLayer AI Audit!`, 'success');
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Submit Dataset Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Dataset submission reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Submit dataset action failed", 'error');
     } finally {
       setIsEvaluatingConsensus(false);
       setIsLoading(false);
@@ -149,48 +153,51 @@ export function App() {
     }
   };
 
-  // 4. Raise Dispute (100% On-Chain)
+  // 4. Raise Dispute (100% On-Chain State Update)
   const handleConfirmDispute = async (taskId: string, reason: string) => {
     setIsLoading(true);
+    setReadError(null);
     try {
-      await executeContractWrite('raise_dispute', [taskId, reason]);
+      const updatedTasks = await executeContractWrite('raise_dispute', [taskId, reason]);
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Dispute raised on ${taskId}. Payout frozen.`, 'success');
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Raise Dispute Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Raise dispute reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Raise dispute action failed", 'error');
     } finally {
       setIsLoading(false);
       setDisputeTask(null);
     }
   };
 
-  // 5. Finalize Payout (100% On-Chain)
+  // 5. Finalize Payout (100% On-Chain State Update)
   const handleFinalizePayout = async (taskId: string) => {
     setIsLoading(true);
+    setReadError(null);
     try {
-      await executeContractWrite('finalize_payout', [taskId]);
+      const updatedTasks = await executeContractWrite('finalize_payout', [taskId]);
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Payout finalized for ${taskId}!`, 'success');
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Finalize Payout Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Finalize payout reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Finalize payout action failed", 'error');
     } finally {
       setIsLoading(false);
       setSelectedTask(null);
     }
   };
 
-  // 6. Resolve Escalation (100% On-Chain)
+  // 6. Resolve Escalation (100% On-Chain State Update)
   const handleResolveEscalation = async (taskId: string, action: 'RELEASE' | 'REFUND' | 'SPLIT') => {
     setIsLoading(true);
+    setReadError(null);
     try {
-      await executeContractWrite('resolve_escalation', [taskId, action]);
+      const updatedTasks = await executeContractWrite('resolve_escalation', [taskId, action]);
+      setTasks(updatedTasks); // Update strictly from contract state
       showToast(`Arbitration action "${action}" completed.`, 'success');
-      await loadTasks();
     } catch (err: any) {
-      console.error("[Resolve Escalation Transaction Failed]", err);
-      showToast(`Transaction Failed: ${err?.message || 'Arbitration reverted'}`, 'error');
+      console.error("[Execution Failed]", err);
+      showToast(err?.message || "Arbitration action failed", 'error');
     } finally {
       setIsLoading(false);
       setSelectedTask(null);
