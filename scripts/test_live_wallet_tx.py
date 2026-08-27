@@ -41,7 +41,7 @@ def main():
 
     # Read current state from contract get_all_tasks
     rpc_url = "https://studio.genlayer.com/api"
-    contract_addr = "0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be"
+    contract_addr = "0xf219bf040d7bb6291b7E822411A46116C4125e0F"
 
     print(f"Querying contract tasks from Studionet for {contract_addr}...")
     try:

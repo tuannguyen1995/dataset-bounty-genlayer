@@ -1,7 +1,7 @@
 import { createClient, chains } from 'genlayer-js';
 import { DatasetTask } from '../types/bounty';
 
-export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xf219bf040d7bb6291b7E822411A46116C4125e0F";
 export const STUDIONET_RPC = import.meta.env.VITE_GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
 export const IS_DEV_MOCK = import.meta.env.VITE_ENABLE_DEV_MOCK === "true";
 
