@@ -7,10 +7,7 @@ import { DatasetTask, BountyStatus } from './types/bounty';
 import { 
   fetchAllTasks, 
   executeContractWrite, 
-  saveLocalTasks, 
-  getContractAddress,
-  isSimulationModeEnabled,
-  setSimulationModeEnabled 
+  getContractAddress 
 } from './config/genlayer';
 import { Header } from './components/Header';
 import { BountyCard } from './components/BountyCard';
@@ -25,7 +22,6 @@ export function App() {
   const [account, setAccount] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [simulationMode, setSimulationMode] = useState<boolean>(isSimulationModeEnabled());
   const [readError, setReadError] = useState<string | null>(null);
   
   // Search & Filters
@@ -39,7 +35,7 @@ export function App() {
   const [previewTask, setPreviewTask] = useState<DatasetTask | null>(null);
   const [disputeTask, setDisputeTask] = useState<DatasetTask | null>(null);
   
-  // AI Consensus simulation state
+  // AI Consensus animation state during transaction
   const [isEvaluatingConsensus, setIsEvaluatingConsensus] = useState<boolean>(false);
 
   // Notifications
@@ -62,7 +58,7 @@ export function App() {
         showToast(err?.message || "Failed to connect wallet", 'error');
       }
     } else {
-      showToast("MetaMask wallet not detected. Please install MetaMask extension to execute on-chain contract calls.", 'error');
+      showToast("MetaMask wallet not detected. Please install MetaMask to interact with GenLayer Studionet.", 'error');
     }
   };
 
@@ -73,14 +69,10 @@ export function App() {
       const fetched = await fetchAllTasks();
       setTasks(fetched);
     } catch (e: any) {
-      console.error("[Contract Load Error]", e);
-      const errMsg = e?.message || "Could not fetch authoritative state from contract.";
+      console.error("[Contract Read Error]", e);
+      const errMsg = e?.message || "Failed to fetch authoritative state from GenLayer smart contract.";
       setReadError(errMsg);
-      
-      // In normal operation, contract state remains authoritative (do NOT fabricate tasks)
-      if (!isSimulationModeEnabled()) {
-        setTasks([]);
-      }
+      setTasks([]); // Contract state remains strictly authoritative
     } finally {
       setIsLoading(false);
     }
@@ -93,9 +85,9 @@ export function App() {
         setAccount(accs[0] || null);
       });
     }
-  }, [simulationMode]);
+  }, []);
 
-  // 1. Create Bounty
+  // 1. Create Bounty (100% On-Chain)
   const handleCreateBounty = async (data: {
     taskId: string;
     escrowAmount: string;
@@ -111,80 +103,34 @@ export function App() {
         [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
         escrowWei
       );
-      showToast(`Bounty "${data.taskId}" successfully published on GenLayer!`, 'success');
+      showToast(`Bounty "${data.taskId}" successfully published on-chain!`, 'success');
       setShowCreateModal(false);
-      await loadTasks(); // Authoritative state refetch
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Create Bounty Error]", err);
-      
-      if (simulationMode) {
-        // Explicit dev simulation mode ONLY
-        const newTask: DatasetTask = {
-          id: data.taskId,
-          buyer: account || "0xbuyer_ai_lab_7f81a2b9",
-          contributor: "0x0000000000000000000000000000000000000000",
-          escrow_amount: data.escrowAmount,
-          contributor_stake: "0",
-          status: "OPEN",
-          spec_url: data.specUrl,
-          dataset_url: "",
-          required_format: data.requiredFormat,
-          blacklist_sources: data.blacklistSources,
-          verdict: "NONE",
-          reason: "Awaiting contributor acceptance",
-          confidence: "0",
-          attempts: "0",
-          payout_ready_at: "0",
-          disputed_at: "0"
-        };
-        const updated = [newTask, ...tasks];
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Local mock task created: ${data.taskId}`, 'info');
-        setShowCreateModal(false);
-      } else {
-        // Normal operation: FAIL LOUDLY, DO NOT CREATE FAKE AUDIT/TASK STATE!
-        showToast(`Transaction Failed: ${err?.message || 'Create bounty reverted'}`, 'error');
-      }
+      console.error("[Create Bounty Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Create bounty reverted'}`, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Accept Bounty
+  // 2. Accept Bounty (100% On-Chain)
   const handleAcceptBounty = async (taskId: string, minStake: string) => {
     setIsLoading(true);
     try {
       const stakeWei = BigInt(minStake);
       await executeContractWrite('accept_bounty', [taskId], stakeWei);
       showToast(`Bounty "${taskId}" accepted with ${minStake} GEN stake!`, 'success');
-      await loadTasks(); // Authoritative state refetch
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Accept Bounty Error]", err);
-      if (simulationMode) {
-        const updated = tasks.map(t => {
-          if (t.id === taskId) {
-            return {
-              ...t,
-              contributor: account || "0xcontributor_dev_3e21a1d4",
-              contributor_stake: minStake,
-              status: "IN_PROGRESS" as BountyStatus
-            };
-          }
-          return t;
-        });
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Mock accepted ${taskId}`, 'info');
-      } else {
-        showToast(`Transaction Failed: ${err?.message || 'Accept bounty reverted'}`, 'error');
-      }
+      console.error("[Accept Bounty Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Accept bounty reverted'}`, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 3. Submit Dataset Sample
+  // 3. Submit Dataset Sample (100% On-Chain AI Audit)
   const handleSubmitDatasetSample = async (taskId: string, datasetUrl: string) => {
     setIsLoading(true);
     setIsEvaluatingConsensus(true);
@@ -192,33 +138,10 @@ export function App() {
     try {
       await executeContractWrite('submit_dataset', [taskId, datasetUrl]);
       showToast(`Dataset sample submitted to GenLayer AI Audit!`, 'success');
-      await loadTasks(); // Authoritative state refetch
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Submit Dataset Error]", err);
-      if (simulationMode) {
-        await new Promise(res => setTimeout(res, 3000));
-        const updated = tasks.map(t => {
-          if (t.id === taskId) {
-            const attemptsNum = Number(t.attempts) + 1;
-            return {
-              ...t,
-              dataset_url: datasetUrl,
-              attempts: String(attemptsNum),
-              verdict: "APPROVED" as any,
-              confidence: "98",
-              reason: "100% Schema & License compliant. Verified MIT license metadata.",
-              status: "AWAITING_PAYOUT" as BountyStatus,
-              payout_ready_at: String(Math.floor(Date.now() / 1000) + 86400)
-            };
-          }
-          return t;
-        });
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Mock dataset audit completed for ${taskId}`, 'info');
-      } else {
-        showToast(`Transaction Failed: ${err?.message || 'Dataset submission reverted'}`, 'error');
-      }
+      console.error("[Submit Dataset Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Dataset submission reverted'}`, 'error');
     } finally {
       setIsEvaluatingConsensus(false);
       setIsLoading(false);
@@ -226,107 +149,55 @@ export function App() {
     }
   };
 
-  // 4. Raise Dispute
+  // 4. Raise Dispute (100% On-Chain)
   const handleConfirmDispute = async (taskId: string, reason: string) => {
     setIsLoading(true);
     try {
       await executeContractWrite('raise_dispute', [taskId, reason]);
       showToast(`Dispute raised on ${taskId}. Payout frozen.`, 'success');
-      await loadTasks(); // Authoritative state refetch
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Raise Dispute Error]", err);
-      if (simulationMode) {
-        const updated = tasks.map(t => {
-          if (t.id === taskId) {
-            return {
-              ...t,
-              status: "DISPUTED" as BountyStatus,
-              reason: `[DISPUTED] ${reason}`,
-              disputed_at: String(Math.floor(Date.now() / 1000))
-            };
-          }
-          return t;
-        });
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Mock dispute raised on ${taskId}`, 'info');
-      } else {
-        showToast(`Transaction Failed: ${err?.message || 'Raise dispute reverted'}`, 'error');
-      }
+      console.error("[Raise Dispute Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Raise dispute reverted'}`, 'error');
     } finally {
       setIsLoading(false);
       setDisputeTask(null);
     }
   };
 
-  // 5. Finalize Payout
+  // 5. Finalize Payout (100% On-Chain)
   const handleFinalizePayout = async (taskId: string) => {
     setIsLoading(true);
     try {
       await executeContractWrite('finalize_payout', [taskId]);
       showToast(`Payout finalized for ${taskId}!`, 'success');
-      await loadTasks(); // Authoritative state refetch
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Finalize Payout Error]", err);
-      if (simulationMode) {
-        const updated = tasks.map(t => {
-          if (t.id === taskId) {
-            return {
-              ...t,
-              status: "CLOSED" as BountyStatus,
-              escrow_amount: "0",
-              contributor_stake: "0"
-            };
-          }
-          return t;
-        });
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Mock payout finalized for ${taskId}`, 'info');
-      } else {
-        showToast(`Transaction Failed: ${err?.message || 'Finalize payout reverted'}`, 'error');
-      }
+      console.error("[Finalize Payout Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Finalize payout reverted'}`, 'error');
     } finally {
       setIsLoading(false);
       setSelectedTask(null);
     }
   };
 
-  // 6. Resolve Escalation
+  // 6. Resolve Escalation (100% On-Chain)
   const handleResolveEscalation = async (taskId: string, action: 'RELEASE' | 'REFUND' | 'SPLIT') => {
     setIsLoading(true);
     try {
       await executeContractWrite('resolve_escalation', [taskId, action]);
-      showToast(`Arbitrated action "${action}" completed.`, 'success');
-      await loadTasks(); // Authoritative state refetch
+      showToast(`Arbitration action "${action}" completed.`, 'success');
+      await loadTasks();
     } catch (err: any) {
-      console.error("[Resolve Escalation Error]", err);
-      if (simulationMode) {
-        const updated = tasks.map(t => {
-          if (t.id === taskId) {
-            return {
-              ...t,
-              status: "CLOSED" as BountyStatus,
-              escrow_amount: "0",
-              contributor_stake: "0",
-              reason: `[ARBITRATED - ${action}] Task resolved by governance.`
-            };
-          }
-          return t;
-        });
-        setTasks(updated);
-        saveLocalTasks(updated);
-        showToast(`[Dev Sim] Mock arbitrated ${taskId} with ${action}`, 'info');
-      } else {
-        showToast(`Transaction Failed: ${err?.message || 'Arbitration reverted'}`, 'error');
-      }
+      console.error("[Resolve Escalation Transaction Failed]", err);
+      showToast(`Transaction Failed: ${err?.message || 'Arbitration reverted'}`, 'error');
     } finally {
       setIsLoading(false);
       setSelectedTask(null);
     }
   };
 
-  // Metrics
+  // Metrics derived strictly from contract tasks
   const totalEscrow = tasks.reduce((sum, t) => sum + Number(t.escrow_amount || 0), 0);
   const activeBounties = tasks.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length;
   const coolingOffCount = tasks.filter(t => t.status === 'AWAITING_PAYOUT').length;
@@ -377,8 +248,6 @@ export function App() {
         isLoading={isLoading}
         isAdmin={isAdmin}
         setIsAdmin={setIsAdmin}
-        simulationMode={simulationMode}
-        setSimulationMode={setSimulationMode}
         readError={readError}
       />
 
@@ -470,10 +339,8 @@ export function App() {
             </div>
 
             <div className="flex items-center justify-between border-b border-obsidian-850 pb-2">
-              <span className="text-slate-400">State Source</span>
-              <span className={`font-bold ${simulationMode ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {simulationMode ? 'Dev Simulation' : 'Authoritative Contract'}
-              </span>
+              <span className="text-slate-400">State Authority</span>
+              <span className="text-emerald-400 font-bold">100% On-Chain</span>
             </div>
 
             <div className="flex items-center justify-between">
@@ -542,17 +409,17 @@ export function App() {
 
           </div>
 
-          {/* Contract Read Error Notice if any in normal operation */}
-          {readError && !simulationMode && (
+          {/* Contract Read Error Notice */}
+          {readError && (
             <div className="bg-rose-950/40 border border-rose-500/40 rounded-3xl p-5 font-mono text-xs text-rose-200 flex items-start space-x-3">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-bold text-rose-300 text-sm mb-1">Authoritative State Fetch Error</h4>
+                <h4 className="font-bold text-rose-300 text-sm mb-1">Authoritative Contract Read Error</h4>
                 <p className="text-slate-300 leading-relaxed mb-2">
                   {readError}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  Per GenLayer Steward guidelines, normal operation enforces contract-derived state authority and does not generate mock state on failed reads.
+                  State is 100% contract-derived from GenLayer Studionet RPC address <code>{getContractAddress()}</code>.
                 </p>
               </div>
             </div>
@@ -564,8 +431,8 @@ export function App() {
               <Database className="w-12 h-12 text-slate-600 mx-auto mb-3" />
               <h3 className="text-base font-bold text-white font-mono">No Dataset Bounties Found</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                {readError && !simulationMode
-                  ? "Unable to load tasks due to contract read failure. Verify target contract deployment on Studionet."
+                {readError
+                  ? "Unable to fetch tasks from contract RPC. Please verify contract deployment or click 'Sync'."
                   : "No tasks match your selected workspace or status filter. Click 'Publish Dataset Bounty' to create one."}
               </p>
             </div>
@@ -597,7 +464,7 @@ export function App() {
       <footer className="border-t border-obsidian-800 py-6 text-center text-xs font-mono text-slate-400 bg-[#05070a]">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>DatasetBounty Protocol © 2026 GenLayer Studionet</span>
-          <span className="text-emerald-400 font-bold">Intelligent Contract v0.2.18 | Builder Score 5 Standard</span>
+          <span className="text-emerald-400 font-bold">100% On-Chain Contract Authoritative State</span>
         </div>
       </footer>
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, Wallet, Cpu, Settings, RefreshCw, Layers, Sparkles, Terminal, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { getContractAddress, setContractAddress, isSimulationModeEnabled, setSimulationModeEnabled } from '../config/genlayer';
+import { Shield, Wallet, Cpu, Settings, RefreshCw, Terminal, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { getContractAddress, setContractAddress } from '../config/genlayer';
 
 interface HeaderProps {
   account: string | null;
@@ -9,8 +9,6 @@ interface HeaderProps {
   isLoading: boolean;
   isAdmin: boolean;
   setIsAdmin: (val: boolean) => void;
-  simulationMode: boolean;
-  setSimulationMode: (val: boolean) => void;
   readError: string | null;
 }
 
@@ -21,8 +19,6 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   isAdmin,
   setIsAdmin,
-  simulationMode,
-  setSimulationMode,
   readError
 }) => {
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -32,13 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
     e.preventDefault();
     setContractAddress(addressInput);
     setShowConfigModal(false);
-    onRefresh();
-  };
-
-  const handleToggleSimulation = () => {
-    const nextVal = !simulationMode;
-    setSimulationModeEnabled(nextVal);
-    setSimulationMode(nextVal);
     onRefresh();
   };
 
@@ -70,32 +59,12 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Quick Toolbar */}
           <div className="flex items-center space-x-2.5">
             
-            {/* Authoritative vs Simulation Mode Indicator */}
-            {!simulationMode ? (
-              <div className="hidden lg:flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-mono">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-slate-300">State:</span>
-                <span className="text-emerald-400 font-bold">On-Chain Authoritative</span>
-              </div>
-            ) : (
-              <div className="hidden lg:flex items-center space-x-2 bg-amber-950/40 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-mono text-amber-300">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                <span>Dev Simulation Mode</span>
-              </div>
-            )}
-
-            {/* Dev Mode Simulation Toggle Switch */}
-            <button
-              onClick={handleToggleSimulation}
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-semibold border transition-all ${
-                simulationMode
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                  : 'bg-obsidian-900 text-slate-400 border-obsidian-800 hover:text-slate-200'
-              }`}
-              title="Explicit Dev-Only Simulation Toggle"
-            >
-              <span>{simulationMode ? 'Sim Mode: ON' : 'Dev Sim: OFF'}</span>
-            </button>
+            {/* Studionet Live Status Badge */}
+            <div className="hidden lg:flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-mono">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-slate-300">Node:</span>
+              <span className="text-emerald-400 font-bold">Studionet RPC</span>
+            </div>
 
             {/* Sync State Button */}
             <button
@@ -150,18 +119,18 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Prominent Read Error Banner in Normal Operation if contract read fails */}
-      {readError && !simulationMode && (
+      {/* Prominent Read Error Banner if contract read fails */}
+      {readError && (
         <div className="bg-rose-950/90 border-b border-rose-500/50 px-4 py-2 text-xs font-mono text-rose-200 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span><strong>Contract Read Failure:</strong> {readError}</span>
+            <span><strong>Contract Read Error:</strong> {readError}</span>
           </div>
           <button
-            onClick={handleToggleSimulation}
-            className="underline font-bold text-amber-300 hover:text-amber-200 ml-4 shrink-0"
+            onClick={onRefresh}
+            className="underline font-bold text-emerald-300 hover:text-emerald-200 ml-4 shrink-0"
           >
-            Enable Dev Simulation Mode
+            Retry Sync
           </button>
         </div>
       )}
@@ -212,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
                   type="submit"
                   className="px-4 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl shadow-emerald-glow transition-all"
                 >
-                  Save Contract Target
+                  Save Target Address
                 </button>
               </div>
             </form>
