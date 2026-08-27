@@ -228,7 +228,7 @@ def run_comprehensive_verdicts_test():
 
     print("\n" + "=" * 75)
     print(" 🎉 ALL 4 ON-CHAIN SETTLEMENT & ARBITRATION SCENARIOS PASSED 100%! ")
-    print(" Protocol Contract Target: 0xb6c92cB00D684581CeC4d1517D4eFCE827FFc0be ")
+    print(" Protocol Contract Target: 0xf219bf040d7bb6291b7E822411A46116C4125e0F ")
     print("=" * 75)
 
 if __name__ == "__main__":
