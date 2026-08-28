@@ -51,7 +51,7 @@ export function getGenLayerClient() {
   });
 }
 
-// 1. READ ON-CHAIN: Strictly fetch from contract (No fallback to mock when IS_DEV_MOCK is false)
+// 1. STRICT READ ON-CHAIN: Empty/invalid contract reads throw explicit errors (Never return fake empty task lists)
 export async function fetchAllTasks(contractAddress: string = getContractAddress()): Promise<DatasetTask[]> {
   if (IS_DEV_MOCK) {
     console.warn("[DEV ONLY] Running in explicit mock simulation mode");
@@ -59,34 +59,49 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
 
   const client = getGenLayerClient();
   
+  if (!contractAddress || contractAddress.trim() === '') {
+    throw new Error("Target contract address is not configured.");
+  }
+
+  let rawData: any;
   try {
-    const rawData = await (client as any).readContract({
+    rawData = await (client as any).readContract({
       address: contractAddress,
       functionName: 'get_all_tasks',
       args: []
     });
-
-    if (!rawData) {
-      return [];
-    }
-
-    if (typeof rawData === 'string') {
-      const parsed = JSON.parse(rawData);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    } else if (Array.isArray(rawData)) {
-      return rawData;
-    }
-
-    return [];
   } catch (e: any) {
-    console.error(`[Contract Read Error] get_all_tasks on ${contractAddress} failed:`, e);
-    throw new Error(`Failed to read authoritative contract state: ${e?.message || 'RPC Read Failed'}`);
+    console.error(`[Contract Read Error] RPC call get_all_tasks on ${contractAddress} failed:`, e);
+    throw new Error(`Contract read failed for address ${contractAddress}: ${e?.message || 'RPC Request Failed'}`);
   }
+
+  // Strict Validation: Empty or invalid contract reads must be treated as FAILURES
+  if (rawData === null || rawData === undefined) {
+    throw new Error(`Contract read returned null or empty response from ${contractAddress}`);
+  }
+
+  let parsed: any = rawData;
+  if (typeof rawData === 'string') {
+    const trimmed = rawData.trim();
+    if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+      throw new Error(`Contract returned uninitialized empty string state from ${contractAddress}`);
+    }
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch (parseErr: any) {
+      throw new Error(`Invalid contract response: failed to parse JSON from ${contractAddress}`);
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid contract state structure: expected Task Array from ${contractAddress}, received ${typeof parsed}`);
+  }
+
+  // Return strictly validated contract-derived task array
+  return parsed;
 }
 
-// 2. WRITE TRANSACTION: Must have finalized receipt before returning updated on-chain tasks
+// 2. STRICT WRITE TRANSACTION: Unconfirmed or failed receipts throw explicit errors and block success path
 export async function executeContractWrite(
   methodName: string,
   args: any[],
@@ -101,29 +116,61 @@ export async function executeContractWrite(
 
   const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
   if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Web3 account found.");
+    throw new Error("No connected Web3 account found. Please connect your wallet.");
   }
 
   console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN`);
 
-  // Send Write Tx
-  const hash = await (client as any).writeContract({
-    address: contractAddress,
-    functionName: methodName,
-    args: args,
-    value: valueInGen,
-  });
+  // 1. Submit Write Transaction
+  let hash: string;
+  try {
+    hash = await (client as any).writeContract({
+      address: contractAddress,
+      functionName: methodName,
+      args: args,
+      value: valueInGen,
+    });
+  } catch (writeErr: any) {
+    console.error(`[GenLayer Tx Submission Error] ${methodName} failed to submit:`, writeErr);
+    throw new Error(`Transaction submission failed: ${writeErr?.message || 'User rejected or RPC error'}`);
+  }
+
+  if (!hash || typeof hash !== 'string' || hash.trim() === '') {
+    throw new Error(`Web3 provider failed to return a valid transaction hash for ${methodName}.`);
+  }
 
   console.log(`[GenLayer Tx] Submitted. Hash: ${hash}. Waiting for Studionet finality receipt...`);
 
-  // Wait for receipt confirmation from Studionet
-  const receipt = await (client as any).waitForTransactionReceipt({ hash });
-  console.log(`[GenLayer Tx] Finality receipt confirmed:`, receipt);
-
-  if (receipt && receipt.status && receipt.status !== 'success' && receipt.status !== 1) {
-    throw new Error(`Transaction failed on-chain with status: ${receipt?.status || 'REVERTED'}`);
+  // 2. Wait for Receipt Finality
+  let receipt: any;
+  try {
+    receipt = await (client as any).waitForTransactionReceipt({ hash });
+  } catch (receiptErr: any) {
+    console.error(`[GenLayer Tx Receipt Error] ${methodName} receipt wait failed:`, receiptErr);
+    throw new Error(`Transaction finality receipt failed for hash ${hash}: ${receiptErr?.message || 'Receipt Timeout/Unconfirmed'}`);
   }
 
-  // Refetch 100% authoritative state directly from contract to update UI
+  console.log(`[GenLayer Tx] Finality receipt received:`, receipt);
+
+  // 3. Strict Failure & Unconfirmed Receipt Guards
+  if (!receipt) {
+    throw new Error(`Transaction receipt is null or unconfirmed on Studionet for hash ${hash}.`);
+  }
+
+  const statusStr = String(receipt.status ?? '').toLowerCase().trim();
+  const isConfirmedSuccess = 
+    statusStr === 'success' || 
+    statusStr === '1' || 
+    statusStr === '0x1' || 
+    statusStr === 'finalized' || 
+    receipt.status === 1 || 
+    receipt.status === true;
+
+  if (!isConfirmedSuccess || receipt.reverted === true || receipt.error) {
+    const detail = receipt.error || receipt.revertReason || statusStr || 'REVERTED';
+    throw new Error(`Transaction failed on-chain with status: ${detail}`);
+  }
+
+  // 4. Refetch 100% Authoritative State ONLY AFTER CONFIRMED RECEIPT SUCCESS
   return await fetchAllTasks(contractAddress);
 }

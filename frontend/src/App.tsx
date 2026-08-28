@@ -70,9 +70,9 @@ export function App() {
       setTasks(fetched);
     } catch (e: any) {
       console.error("[Contract Read Error]", e);
-      const errMsg = e?.message || "Contract returned empty state or RPC error";
+      const errMsg = e?.message || "Contract returned empty or unparseable state";
       setReadError(errMsg);
-      setTasks([]); // State remains strictly authoritative from on-chain
+      setTasks([]);
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +87,7 @@ export function App() {
     }
   }, []);
 
-  // 1. Create Bounty (100% On-Chain State Update)
+  // 1. Create Bounty (Strict On-Chain Execution & Receipt Validation)
   const handleCreateBounty = async (data: {
     taskId: string;
     escrowAmount: string;
@@ -104,26 +104,25 @@ export function App() {
         [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
         escrowWei
       );
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Bounty "${data.taskId}" successfully published on-chain!`, 'success');
       setShowCreateModal(false);
     } catch (err: any) {
       console.error("[Execution Failed]", err);
       showToast(err?.message || "Create bounty action failed", 'error');
-      // Keep existing state on error, never mutate status locally
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Accept Bounty (100% On-Chain State Update)
+  // 2. Accept Bounty (Strict On-Chain Execution & Receipt Validation)
   const handleAcceptBounty = async (taskId: string, minStake: string) => {
     setIsLoading(true);
     setReadError(null);
     try {
       const stakeWei = BigInt(minStake);
       const updatedTasks = await executeContractWrite('accept_bounty', [taskId], stakeWei);
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Bounty "${taskId}" accepted with ${minStake} GEN stake!`, 'success');
     } catch (err: any) {
       console.error("[Execution Failed]", err);
@@ -133,7 +132,7 @@ export function App() {
     }
   };
 
-  // 3. Submit Dataset Sample (100% On-Chain State Update)
+  // 3. Submit Dataset Sample (Strict On-Chain Execution & Receipt Validation)
   const handleSubmitDatasetSample = async (taskId: string, datasetUrl: string) => {
     setIsLoading(true);
     setIsEvaluatingConsensus(true);
@@ -141,7 +140,7 @@ export function App() {
 
     try {
       const updatedTasks = await executeContractWrite('submit_dataset', [taskId, datasetUrl]);
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Dataset sample submitted to GenLayer AI Audit!`, 'success');
     } catch (err: any) {
       console.error("[Execution Failed]", err);
@@ -153,13 +152,13 @@ export function App() {
     }
   };
 
-  // 4. Raise Dispute (100% On-Chain State Update)
+  // 4. Raise Dispute (Strict On-Chain Execution & Receipt Validation)
   const handleConfirmDispute = async (taskId: string, reason: string) => {
     setIsLoading(true);
     setReadError(null);
     try {
       const updatedTasks = await executeContractWrite('raise_dispute', [taskId, reason]);
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Dispute raised on ${taskId}. Payout frozen.`, 'success');
     } catch (err: any) {
       console.error("[Execution Failed]", err);
@@ -170,13 +169,13 @@ export function App() {
     }
   };
 
-  // 5. Finalize Payout (100% On-Chain State Update)
+  // 5. Finalize Payout (Strict On-Chain Execution & Receipt Validation)
   const handleFinalizePayout = async (taskId: string) => {
     setIsLoading(true);
     setReadError(null);
     try {
       const updatedTasks = await executeContractWrite('finalize_payout', [taskId]);
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Payout finalized for ${taskId}!`, 'success');
     } catch (err: any) {
       console.error("[Execution Failed]", err);
@@ -187,13 +186,13 @@ export function App() {
     }
   };
 
-  // 6. Resolve Escalation (100% On-Chain State Update)
+  // 6. Resolve Escalation (Strict On-Chain Execution & Receipt Validation)
   const handleResolveEscalation = async (taskId: string, action: 'RELEASE' | 'REFUND' | 'SPLIT') => {
     setIsLoading(true);
     setReadError(null);
     try {
       const updatedTasks = await executeContractWrite('resolve_escalation', [taskId, action]);
-      setTasks(updatedTasks); // Update strictly from contract state
+      setTasks(updatedTasks);
       showToast(`Arbitration action "${action}" completed.`, 'success');
     } catch (err: any) {
       console.error("[Execution Failed]", err);
@@ -416,31 +415,30 @@ export function App() {
 
           </div>
 
-          {/* Contract Read Error Notice */}
-          {readError && (
-            <div className="bg-rose-950/40 border border-rose-500/40 rounded-3xl p-5 font-mono text-xs text-rose-200 flex items-start space-x-3">
-              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-rose-300 text-sm mb-1">Authoritative Contract Read Error</h4>
-                <p className="text-slate-300 leading-relaxed mb-2">
-                  {readError}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  State is 100% contract-derived from GenLayer Studionet RPC address <code>{getContractAddress()}</code>.
-                </p>
-              </div>
+          {/* Explicit Failure View vs Task List View */}
+          {readError ? (
+            <div className="bg-rose-950/40 border border-rose-500/50 p-10 text-center rounded-3xl font-mono">
+              <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-3 animate-pulse" />
+              <h3 className="text-lg font-bold text-rose-300 font-mono">Authoritative Contract Read Failure</h3>
+              <p className="text-xs text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
+                {readError}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-3 max-w-lg mx-auto">
+                Per GenLayer Steward guidelines, empty or invalid contract reads are treated as explicit failures and cannot render as a successful empty task list.
+              </p>
+              <button
+                onClick={loadTasks}
+                className="mt-5 px-5 py-2.5 bg-rose-500 hover:bg-rose-400 text-black font-extrabold text-xs rounded-xl shadow-lg transition-all active:scale-95"
+              >
+                Retry On-Chain Read Sync
+              </button>
             </div>
-          )}
-
-          {/* Bounty Grid */}
-          {filteredTasks.length === 0 ? (
+          ) : filteredTasks.length === 0 ? (
             <div className="obsidian-panel p-12 text-center rounded-3xl border border-obsidian-800">
               <Database className="w-12 h-12 text-slate-600 mx-auto mb-3" />
               <h3 className="text-base font-bold text-white font-mono">No Dataset Bounties Found</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                {readError
-                  ? "Unable to fetch tasks from contract RPC. Please verify contract deployment or click 'Sync'."
-                  : "No tasks match your selected workspace or status filter. Click 'Publish Dataset Bounty' to create one."}
+                No tasks match your selected workspace or status filter. Click 'Publish Dataset Bounty' to create one.
               </p>
             </div>
           ) : (
