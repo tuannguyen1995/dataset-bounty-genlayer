@@ -51,7 +51,7 @@ export function getGenLayerClient() {
   });
 }
 
-// 1. STRICT READ ON-CHAIN: Empty/invalid contract reads throw explicit errors (Never return fake empty task lists)
+// 1. ĐỌC DỮ LIỆU ON-CHAIN: NÉM LỖI RÕ RÀNG KHI EMPTY/INVALID, KHÔNG NUỐT LỖI
 export async function fetchAllTasks(contractAddress: string = getContractAddress()): Promise<DatasetTask[]> {
   if (IS_DEV_MOCK) {
     console.warn("[DEV ONLY] Running in explicit mock simulation mode");
@@ -75,9 +75,9 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
     throw new Error(`Contract read failed for address ${contractAddress}: ${e?.message || 'RPC Request Failed'}`);
   }
 
-  // Strict Validation: Empty or invalid contract reads must be treated as FAILURES
-  if (rawData === null || rawData === undefined) {
-    throw new Error(`Contract read returned null or empty response from ${contractAddress}`);
+  // Chặn đứng null/undefined: Không được coi là empty state hợp lệ
+  if (rawData === undefined || rawData === null) {
+    throw new Error(`Contract read returned null/undefined from ${contractAddress}. The contract may not be deployed or RPC is unresponsive.`);
   }
 
   let parsed: any = rawData;
@@ -89,19 +89,18 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
     try {
       parsed = JSON.parse(trimmed);
     } catch (parseErr: any) {
-      throw new Error(`Invalid contract response: failed to parse JSON from ${contractAddress}`);
+      throw new Error(`Contract returned unparseable JSON: ${parseErr.message}. Raw payload: "${rawData.slice(0, 100)}"`);
     }
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error(`Invalid contract state structure: expected Task Array from ${contractAddress}, received ${typeof parsed}`);
+    throw new Error(`Contract payload must be a JSON array, got ${typeof parsed}`);
   }
 
-  // Return strictly validated contract-derived task array
-  return parsed;
+  return parsed as DatasetTask[];
 }
 
-// 2. STRICT WRITE TRANSACTION: Unconfirmed or failed receipts throw explicit errors and block success path
+// 2. GHI TRANSACTION: CHẶN ĐỨNG HOÀN TOÀN MỌI UNCONFIRMED/FAILED RECEIPT
 export async function executeContractWrite(
   methodName: string,
   args: any[],
@@ -111,20 +110,20 @@ export async function executeContractWrite(
   const client = getGenLayerClient();
   
   if (!client || !(window as any).ethereum) {
-    throw new Error("MetaMask is required to interact with GenLayer Studionet.");
+    throw new Error("MetaMask or an EIP-1193 compatible browser wallet is required.");
   }
 
   const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
   if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Web3 account found. Please connect your wallet.");
+    throw new Error("No connected Web3 account detected in browser wallet.");
   }
 
   console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN`);
 
-  // 1. Submit Write Transaction
-  let hash: string;
+  // Step 1: Dispatch write transaction
+  let txHash: string;
   try {
-    hash = await (client as any).writeContract({
+    txHash = await (client as any).writeContract({
       address: contractAddress,
       functionName: methodName,
       args: args,
@@ -132,29 +131,29 @@ export async function executeContractWrite(
     });
   } catch (writeErr: any) {
     console.error(`[GenLayer Tx Submission Error] ${methodName} failed to submit:`, writeErr);
-    throw new Error(`Transaction submission failed: ${writeErr?.message || 'User rejected or RPC error'}`);
+    throw new Error(`Transaction rejected by user or failed dispatch: ${writeErr?.message || writeErr}`);
   }
 
-  if (!hash || typeof hash !== 'string' || hash.trim() === '') {
-    throw new Error(`Web3 provider failed to return a valid transaction hash for ${methodName}.`);
+  if (!txHash || typeof txHash !== 'string' || !txHash.startsWith("0x")) {
+    throw new Error(`Invalid transaction hash received: "${txHash}". Cannot proceed.`);
   }
 
-  console.log(`[GenLayer Tx] Submitted. Hash: ${hash}. Waiting for Studionet finality receipt...`);
+  console.log(`[GenLayer Tx] Submitted. Hash: ${txHash}. Waiting for Studionet finality receipt...`);
 
-  // 2. Wait for Receipt Finality
+  // Step 2: Wait for finality & receipt confirmation
   let receipt: any;
   try {
-    receipt = await (client as any).waitForTransactionReceipt({ hash });
-  } catch (receiptErr: any) {
-    console.error(`[GenLayer Tx Receipt Error] ${methodName} receipt wait failed:`, receiptErr);
-    throw new Error(`Transaction finality receipt failed for hash ${hash}: ${receiptErr?.message || 'Receipt Timeout/Unconfirmed'}`);
+    receipt = await (client as any).waitForTransactionReceipt({ hash: txHash });
+  } catch (waitErr: any) {
+    console.error(`[GenLayer Tx Receipt Error] ${methodName} receipt wait failed:`, waitErr);
+    throw new Error(`Failed while waiting for transaction receipt (${txHash}): ${waitErr?.message || waitErr}`);
   }
 
   console.log(`[GenLayer Tx] Finality receipt received:`, receipt);
 
-  // 3. Strict Failure & Unconfirmed Receipt Guards
+  // Step 3: Hard-gate: MUST fail explicitly if receipt is missing or status != 'success'
   if (!receipt) {
-    throw new Error(`Transaction receipt is null or unconfirmed on Studionet for hash ${hash}.`);
+    throw new Error(`Critical: Transaction receipt is missing for hash ${txHash}. Halting success path.`);
   }
 
   const statusStr = String(receipt.status ?? '').toLowerCase().trim();
@@ -168,9 +167,9 @@ export async function executeContractWrite(
 
   if (!isConfirmedSuccess || receipt.reverted === true || receipt.error) {
     const detail = receipt.error || receipt.revertReason || statusStr || 'REVERTED';
-    throw new Error(`Transaction failed on-chain with status: ${detail}`);
+    throw new Error(`On-chain transaction reverted or failed with status: "${detail}". State will not be updated.`);
   }
 
-  // 4. Refetch 100% Authoritative State ONLY AFTER CONFIRMED RECEIPT SUCCESS
+  // Step 4: Authoritative re-fetch directly from contract
   return await fetchAllTasks(contractAddress);
 }

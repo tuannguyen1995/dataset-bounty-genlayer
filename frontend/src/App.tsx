@@ -7,7 +7,8 @@ import { DatasetTask, BountyStatus } from './types/bounty';
 import { 
   fetchAllTasks, 
   executeContractWrite, 
-  getContractAddress 
+  getContractAddress,
+  CONTRACT_ADDRESS 
 } from './config/genlayer';
 import { Header } from './components/Header';
 import { BountyCard } from './components/BountyCard';
@@ -18,11 +19,14 @@ import { ConsensusFeed } from './components/ConsensusFeed';
 import { DisputeModal } from './components/DisputeModal';
 
 export function App() {
-  const [tasks, setTasks] = useState<DatasetTask[]>([]);
+  // Tasks State Machine: null = Uninitialized / Read Error, DatasetTask[] = Authoritative Contract State
+  const [tasks, setTasks] = useState<DatasetTask[] | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [readError, setReadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [txSuccessMsg, setTxSuccessMsg] = useState<string | null>(null);
   
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -62,24 +66,24 @@ export function App() {
     }
   };
 
-  const loadTasks = async () => {
+  const loadContractData = async () => {
     setIsLoading(true);
     setReadError(null);
     try {
       const fetched = await fetchAllTasks();
-      setTasks(fetched);
+      setTasks(fetched); // Đọc thành công từ Smart Contract
     } catch (e: any) {
-      console.error("[Contract Read Error]", e);
-      const errMsg = e?.message || "Contract returned empty or unparseable state";
-      setReadError(errMsg);
-      setTasks([]);
+      console.error("[Contract Read Failure]:", e);
+      // ĐẶT ERROR STATE RÕ RÀNG - KHÔNG ĐỂ tasks = [] TRÁNH NHẦM LẪN VỚI EMPTY LIST HỢP LỆ
+      setTasks(null);
+      setReadError(e?.message || "Failed to communicate with contract.");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadTasks();
+    loadContractData();
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       (window as any).ethereum.on?.('accountsChanged', (accs: string[]) => {
         setAccount(accs[0] || null);
@@ -87,7 +91,35 @@ export function App() {
     }
   }, []);
 
-  // 1. Create Bounty (Strict On-Chain Execution & Receipt Validation)
+  // Generic write execution handler enforcing strict error boundary
+  const handleContractAction = async (
+    fnName: string, 
+    args: any[], 
+    val: bigint = BigInt(0),
+    onSuccessMsg?: string
+  ) => {
+    setActionError(null);
+    setTxSuccessMsg(null);
+    setIsLoading(true);
+    try {
+      const updatedTasks = await executeContractWrite(fnName, args, val);
+      setTasks(updatedTasks); // Cập nhật 100% từ Contract State mới
+      const msg = onSuccessMsg || `Action "${fnName}" confirmed on-chain successfully!`;
+      setTxSuccessMsg(msg);
+      showToast(msg, 'success');
+      return true;
+    } catch (err: any) {
+      console.error(`[Execution Error - ${fnName}]:`, err);
+      const errMsg = err?.message || `Transaction ${fnName} failed or reverted.`;
+      setActionError(errMsg);
+      showToast(errMsg, 'error');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 1. Create Bounty
   const handleCreateBounty = async (data: {
     taskId: string;
     escrowAmount: string;
@@ -95,123 +127,94 @@ export function App() {
     requiredFormat: string;
     blacklistSources: string;
   }) => {
-    setIsLoading(true);
-    setReadError(null);
-    try {
-      const escrowWei = BigInt(data.escrowAmount);
-      const updatedTasks = await executeContractWrite(
-        'create_bounty',
-        [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
-        escrowWei
-      );
-      setTasks(updatedTasks);
-      showToast(`Bounty "${data.taskId}" successfully published on-chain!`, 'success');
+    const escrowWei = BigInt(data.escrowAmount);
+    const ok = await handleContractAction(
+      'create_bounty',
+      [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
+      escrowWei,
+      `Bounty "${data.taskId}" successfully published on-chain!`
+    );
+    if (ok) {
       setShowCreateModal(false);
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Create bounty action failed", 'error');
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // 2. Accept Bounty (Strict On-Chain Execution & Receipt Validation)
+  // 2. Accept Bounty
   const handleAcceptBounty = async (taskId: string, minStake: string) => {
-    setIsLoading(true);
-    setReadError(null);
-    try {
-      const stakeWei = BigInt(minStake);
-      const updatedTasks = await executeContractWrite('accept_bounty', [taskId], stakeWei);
-      setTasks(updatedTasks);
-      showToast(`Bounty "${taskId}" accepted with ${minStake} GEN stake!`, 'success');
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Accept bounty action failed", 'error');
-    } finally {
-      setIsLoading(false);
-    }
+    const stakeWei = BigInt(minStake);
+    await handleContractAction(
+      'accept_bounty',
+      [taskId],
+      stakeWei,
+      `Bounty "${taskId}" accepted with ${minStake} GEN stake!`
+    );
   };
 
-  // 3. Submit Dataset Sample (Strict On-Chain Execution & Receipt Validation)
+  // 3. Submit Dataset Sample
   const handleSubmitDatasetSample = async (taskId: string, datasetUrl: string) => {
-    setIsLoading(true);
     setIsEvaluatingConsensus(true);
-    setReadError(null);
-
     try {
-      const updatedTasks = await executeContractWrite('submit_dataset', [taskId, datasetUrl]);
-      setTasks(updatedTasks);
-      showToast(`Dataset sample submitted to GenLayer AI Audit!`, 'success');
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Submit dataset action failed", 'error');
+      await handleContractAction(
+        'submit_dataset',
+        [taskId, datasetUrl],
+        BigInt(0),
+        `Dataset sample submitted to GenLayer AI Audit!`
+      );
     } finally {
       setIsEvaluatingConsensus(false);
-      setIsLoading(false);
       setSelectedTask(null);
     }
   };
 
-  // 4. Raise Dispute (Strict On-Chain Execution & Receipt Validation)
+  // 4. Raise Dispute
   const handleConfirmDispute = async (taskId: string, reason: string) => {
-    setIsLoading(true);
-    setReadError(null);
-    try {
-      const updatedTasks = await executeContractWrite('raise_dispute', [taskId, reason]);
-      setTasks(updatedTasks);
-      showToast(`Dispute raised on ${taskId}. Payout frozen.`, 'success');
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Raise dispute action failed", 'error');
-    } finally {
-      setIsLoading(false);
+    const ok = await handleContractAction(
+      'raise_dispute',
+      [taskId, reason],
+      BigInt(0),
+      `Dispute raised on ${taskId}. Payout frozen.`
+    );
+    if (ok) {
       setDisputeTask(null);
     }
   };
 
-  // 5. Finalize Payout (Strict On-Chain Execution & Receipt Validation)
+  // 5. Finalize Payout
   const handleFinalizePayout = async (taskId: string) => {
-    setIsLoading(true);
-    setReadError(null);
-    try {
-      const updatedTasks = await executeContractWrite('finalize_payout', [taskId]);
-      setTasks(updatedTasks);
-      showToast(`Payout finalized for ${taskId}!`, 'success');
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Finalize payout action failed", 'error');
-    } finally {
-      setIsLoading(false);
+    const ok = await handleContractAction(
+      'finalize_payout',
+      [taskId],
+      BigInt(0),
+      `Payout finalized for ${taskId}!`
+    );
+    if (ok) {
       setSelectedTask(null);
     }
   };
 
-  // 6. Resolve Escalation (Strict On-Chain Execution & Receipt Validation)
+  // 6. Resolve Escalation
   const handleResolveEscalation = async (taskId: string, action: 'RELEASE' | 'REFUND' | 'SPLIT') => {
-    setIsLoading(true);
-    setReadError(null);
-    try {
-      const updatedTasks = await executeContractWrite('resolve_escalation', [taskId, action]);
-      setTasks(updatedTasks);
-      showToast(`Arbitration action "${action}" completed.`, 'success');
-    } catch (err: any) {
-      console.error("[Execution Failed]", err);
-      showToast(err?.message || "Arbitration action failed", 'error');
-    } finally {
-      setIsLoading(false);
+    const ok = await handleContractAction(
+      'resolve_escalation',
+      [taskId, action],
+      BigInt(0),
+      `Arbitration action "${action}" completed on-chain.`
+    );
+    if (ok) {
       setSelectedTask(null);
     }
   };
 
-  // Metrics derived strictly from contract tasks
-  const totalEscrow = tasks.reduce((sum, t) => sum + Number(t.escrow_amount || 0), 0);
-  const activeBounties = tasks.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length;
-  const coolingOffCount = tasks.filter(t => t.status === 'AWAITING_PAYOUT').length;
-  const activeDisputes = tasks.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length;
+  // Metrics derived strictly when tasks is valid array
+  const activeTaskList = tasks || [];
+  const totalEscrow = activeTaskList.reduce((sum, t) => sum + Number(t.escrow_amount || 0), 0);
+  const activeBounties = activeTaskList.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length;
+  const coolingOffCount = activeTaskList.filter(t => t.status === 'AWAITING_PAYOUT').length;
+  const activeDisputes = activeTaskList.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length;
 
   // Filter Tasks
   const currentUser = (account || '').toLowerCase();
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = activeTaskList.filter(t => {
     const matchesSearch = 
       t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.required_format.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -250,7 +253,7 @@ export function App() {
       <Header
         account={account}
         connectWallet={connectWallet}
-        onRefresh={loadTasks}
+        onRefresh={loadContractData}
         isLoading={isLoading}
         isAdmin={isAdmin}
         setIsAdmin={setIsAdmin}
@@ -294,9 +297,9 @@ export function App() {
             </span>
 
             {[
-              { id: 'ALL', label: 'All Bounties', icon: Layers, count: tasks.length },
-              { id: 'BUYER', label: 'My Buyer Escrows', icon: Lock, count: tasks.filter(t => t.buyer.toLowerCase() === currentUser).length },
-              { id: 'CONTRIBUTOR', label: 'My Contributions', icon: Users, count: tasks.filter(t => t.contributor.toLowerCase() === currentUser).length },
+              { id: 'ALL', label: 'All Bounties', icon: Layers, count: activeTaskList.length },
+              { id: 'BUYER', label: 'My Buyer Escrows', icon: Lock, count: activeTaskList.filter(t => t.buyer.toLowerCase() === currentUser).length },
+              { id: 'CONTRIBUTOR', label: 'My Contributions', icon: Users, count: activeTaskList.filter(t => t.contributor.toLowerCase() === currentUser).length },
               { id: 'DISPUTES', label: 'Active Disputes', icon: AlertCircle, count: activeDisputes },
             ].map((rf) => {
               const Icon = rf.icon;
@@ -381,6 +384,25 @@ export function App() {
           {/* Live AI Consensus Step Feed Animation */}
           <ConsensusFeed isEvaluating={isEvaluatingConsensus} />
 
+          {/* 🚨 THÔNG BÁO LỖI GHI TRANSACTION (WRITE ACTION ERROR) */}
+          {actionError && (
+            <div className="p-4 rounded-3xl bg-rose-950/80 border border-rose-500/50 font-mono text-xs text-rose-200 flex items-start space-x-3 animate-pulse">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-rose-300 text-sm mb-0.5">❌ Transaction Failed / Reverted</h3>
+                <p className="text-slate-300 leading-relaxed">{actionError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ THÔNG BÁO GIAO DỊCH THÀNH CÔNG */}
+          {txSuccessMsg && (
+            <div className="p-4 rounded-3xl bg-emerald-950/80 border border-emerald-500/50 font-mono text-xs text-emerald-200 flex items-center space-x-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <p className="font-semibold text-emerald-300">{txSuccessMsg}</p>
+            </div>
+          )}
+
           {/* Search & Status Filters */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             
@@ -415,22 +437,22 @@ export function App() {
 
           </div>
 
-          {/* Explicit Failure View vs Task List View */}
-          {readError ? (
+          {/* 🚨 PHÂN BIỆT RÕ RÀNG: CONTRACT READ ERROR vs EMPTY TASK LIST */}
+          {readError || tasks === null ? (
             <div className="bg-rose-950/40 border border-rose-500/50 p-10 text-center rounded-3xl font-mono">
               <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-3 animate-pulse" />
-              <h3 className="text-lg font-bold text-rose-300 font-mono">Authoritative Contract Read Failure</h3>
+              <h3 className="text-lg font-bold text-rose-300 font-mono">⚠️ Contract Read Failure</h3>
               <p className="text-xs text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
-                {readError}
+                {readError || "Unable to fetch authoritative state from GenLayer smart contract."}
               </p>
               <p className="text-[11px] text-slate-400 mt-3 max-w-lg mx-auto">
-                Per GenLayer Steward guidelines, empty or invalid contract reads are treated as explicit failures and cannot render as a successful empty task list.
+                Per GenLayer Steward guidelines, uninitialized or invalid contract responses are displayed as explicit read failures and cannot render as a successful empty task list.
               </p>
               <button
-                onClick={loadTasks}
+                onClick={loadContractData}
                 className="mt-5 px-5 py-2.5 bg-rose-500 hover:bg-rose-400 text-black font-extrabold text-xs rounded-xl shadow-lg transition-all active:scale-95"
               >
-                Retry On-Chain Read Sync
+                Retry Contract Read
               </button>
             </div>
           ) : filteredTasks.length === 0 ? (
@@ -438,7 +460,7 @@ export function App() {
               <Database className="w-12 h-12 text-slate-600 mx-auto mb-3" />
               <h3 className="text-base font-bold text-white font-mono">No Dataset Bounties Found</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                No tasks match your selected workspace or status filter. Click 'Publish Dataset Bounty' to create one.
+                No dataset bounties created yet on-chain. Click 'Publish Dataset Bounty' to create one.
               </p>
             </div>
           ) : (
