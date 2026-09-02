@@ -23,11 +23,11 @@ class DatasetTask:
     attempts: bigint
     payout_ready_at: bigint
     disputed_at: bigint
-    # Immutable Manifest Anchoring Fields (Steward Requirement)
-    spec_hash: str              # SHA-256 hash of spec content at creation time
-    dataset_hash: str           # SHA-256 hash of dataset content at submission time
-    dataset_record_count: str   # Number of records verified by AI audit
-    dataset_size_bytes: str     # Content length verified by AI audit
+    # Immutable Manifest Anchoring Fields (Steward & GenVM Compliant)
+    spec_hash: str              # SHA-256 manifest hash anchored by Buyer at creation
+    dataset_hash: str           # SHA-256 manifest hash anchored by Contributor at submission
+    dataset_record_count: str   # Number of records verified by GenLayer consensus
+    dataset_size_bytes: str     # Content length verified by GenLayer consensus
 
 class Contract(gl.Contract):
     platform_admin: str
@@ -83,18 +83,19 @@ class Contract(gl.Contract):
             verdict = "ESCALATE"
         return verdict
 
-    def _compute_content_hash(self, content: str) -> str:
-        """Compute SHA-256 hash for content integrity anchoring."""
-        return hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
-
     @gl.public.write.payable
     def create_bounty(
         self,
         task_id: str,
         spec_url: str,
+        spec_hash: str,
         required_format: str,
         blacklist_sources: str
     ) -> None:
+        """
+        Buyer creates bounty by locking escrow and anchoring the immutable specification manifest hash (SHA-256).
+        Strictly GenVM compliant: Does NOT execute non-deterministic web rendering directly in write method.
+        """
         if task_id in self.tasks:
             raise UserError(f"Bounty task ID {task_id} already exists")
         
@@ -103,22 +104,10 @@ class Contract(gl.Contract):
             raise UserError("Escrow bounty reward must be strictly positive")
         if not spec_url.startswith("http"):
             raise UserError("Valid specification HTTP/HTTPS URL required")
+        if not spec_hash or len(spec_hash.strip()) < 16:
+            raise UserError("Valid immutable specification manifest hash (SHA-256) required")
 
         caller = str(gl.message.sender_address).lower()
-
-        # Immutable Manifest Anchoring: Fetch and hash specification content at creation time
-        spec_content = ""
-        spec_hash = ""
-        try:
-            s_res = gl.nondet.web.render(spec_url.strip(), mode="text")
-            spec_content = str(s_res)
-            if len(spec_content.strip()) < 10:
-                raise UserError("Specification URL returned empty or minimal content — cannot anchor manifest")
-            spec_hash = self._compute_content_hash(spec_content)
-        except UserError:
-            raise
-        except Exception as e:
-            raise UserError(f"Failed to fetch and anchor specification manifest: {str(e)}")
 
         self.tasks[task_id] = DatasetTask(
             buyer=caller,
@@ -136,7 +125,7 @@ class Contract(gl.Contract):
             attempts=bigint(0),
             payout_ready_at=bigint(0),
             disputed_at=bigint(0),
-            spec_hash=spec_hash,
+            spec_hash=spec_hash.strip().lower(),
             dataset_hash="",
             dataset_record_count="0",
             dataset_size_bytes="0"
@@ -166,8 +155,16 @@ class Contract(gl.Contract):
         self.tasks[task_id] = task
 
     @gl.public.write
-    def submit_dataset(self, task_id: str, dataset_url: str) -> None:
-        """Contributor submits dataset URL for autonomous AI consensus adjudication with immutable manifest anchoring."""
+    def submit_dataset(
+        self,
+        task_id: str,
+        dataset_url: str,
+        dataset_hash: str = ""
+    ) -> None:
+        """
+        Contributor submits dataset URL and manifest hash for autonomous AI consensus adjudication.
+        All non-deterministic web rendering and LLM audits are strictly executed inside gl.vm.run_nondet.
+        """
         if task_id not in self.tasks:
             raise UserError("Task not found")
         task = self.tasks[task_id]
@@ -188,25 +185,26 @@ class Contract(gl.Contract):
         format_str = task.required_format
         black_str = task.blacklist_sources
         anchored_spec_hash = task.spec_hash
+        submitted_dataset_hash = dataset_hash.strip().lower()
 
         def leader_fn() -> dict:
-            # 1. Anti-Rugpull Guard: Fetch buyer specification and verify immutable manifest integrity
+            # 1. Anti-Rugpull Guard: Fetch buyer specification and verify manifest integrity
             try:
                 s_res = gl.nondet.web.render(spec_str, mode="text")
                 s_text = str(s_res)
                 if any(err in s_text[:400].lower() for err in ["404 not found", "error 404", "not found"]):
                     return {"verdict": "ESCALATE", "confidence": 100, "reason": "Specification URL is dead/404; escrow held to protect contributor.",
-                            "record_count": 0, "content_size": 0}
+                            "record_count": 0, "content_size": 0, "computed_spec_hash": "", "computed_dataset_hash": ""}
             except Exception as e:
                 return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Specification fetch failed: {str(e)}",
-                        "record_count": 0, "content_size": 0}
+                        "record_count": 0, "content_size": 0, "computed_spec_hash": "", "computed_dataset_hash": ""}
 
-            # 1b. Verify specification content hasn't been tampered since bounty creation
-            current_spec_hash = hashlib.sha256(s_text.encode("utf-8", errors="replace")).hexdigest()
-            if anchored_spec_hash and current_spec_hash != anchored_spec_hash:
+            # 1b. Verify spec content matches the anchored spec_hash (Detect Buyer Tampering)
+            computed_spec_hash = hashlib.sha256(s_text.encode("utf-8", errors="replace")).hexdigest().lower()
+            if anchored_spec_hash and computed_spec_hash != anchored_spec_hash:
                 return {"verdict": "ESCALATE", "confidence": 100,
-                        "reason": f"Specification content was modified after bounty creation. Anchored hash: {anchored_spec_hash[:16]}..., current: {current_spec_hash[:16]}... Escrow held pending arbitration.",
-                        "record_count": 0, "content_size": 0}
+                        "reason": f"MANIFEST TAMPERED: Specification content was modified after creation. Anchored: {anchored_spec_hash[:16]}..., Computed: {computed_spec_hash[:16]}... Escrow frozen for arbitration.",
+                        "record_count": 0, "content_size": 0, "computed_spec_hash": computed_spec_hash, "computed_dataset_hash": ""}
 
             # 2. Anti-Spam Guard: Fetch full dataset content for whole-dataset verification
             try:
@@ -214,25 +212,29 @@ class Contract(gl.Contract):
                 d_text = str(d_res)
                 if any(err in d_text[:400].lower() for err in ["404 not found", "error 404", "not found"]):
                     return {"verdict": "REFUND", "confidence": 100, "reason": "Dataset URL is dead/404 or empty.",
-                            "record_count": 0, "content_size": 0}
+                            "record_count": 0, "content_size": 0, "computed_spec_hash": computed_spec_hash, "computed_dataset_hash": ""}
             except Exception as e:
                 return {"verdict": "REFUND", "confidence": 100, "reason": f"Dataset fetch failed: {str(e)}",
-                        "record_count": 0, "content_size": 0}
+                        "record_count": 0, "content_size": 0, "computed_spec_hash": computed_spec_hash, "computed_dataset_hash": ""}
+
+            # 2b. Compute dataset manifest hash
+            computed_dataset_hash = hashlib.sha256(d_text.encode("utf-8", errors="replace")).hexdigest().lower()
+            if submitted_dataset_hash and computed_dataset_hash != submitted_dataset_hash:
+                return {"verdict": "REFUND", "confidence": 100,
+                        "reason": f"MANIFEST MISMATCH: Submitted dataset hash ({submitted_dataset_hash[:16]}...) does not match computed content hash ({computed_dataset_hash[:16]}...).",
+                        "record_count": 0, "content_size": 0, "computed_spec_hash": computed_spec_hash, "computed_dataset_hash": computed_dataset_hash}
 
             # 3. Compute dataset content metrics for provenance verification
             content_size = len(d_text)
-            # Count records: lines for JSONL, rows for CSV
             lines = [l for l in d_text.strip().split("\n") if l.strip()]
             record_count = len(lines)
 
-            # 4. Whole-dataset provenance & licensing AI audit (NOT just a short preview)
-            # Provide full content up to GenVM limits, plus statistical summary for large datasets
+            # 4. Whole-dataset provenance & licensing AI audit
             max_audit_chars = 8000
             if content_size <= max_audit_chars:
                 audit_content = d_text
                 content_coverage = "FULL (100% of content audited)"
             else:
-                # For large datasets: audit head + tail + statistical summary
                 head_sample = d_text[:4000]
                 tail_sample = d_text[-2000:]
                 audit_content = f"[HEAD — first 4000 chars]:\n{head_sample}\n\n[TAIL — last 2000 chars]:\n{tail_sample}"
@@ -257,29 +259,34 @@ DATASET CONTENT ({content_coverage}):
 DATASET STATISTICS:
 - Total content size: {content_size} bytes
 - Total record/line count: {record_count}
-- Content hash (SHA-256): Will be anchored immutably on-chain
+- Content hash (SHA-256): {computed_dataset_hash}
 
 VERIFICATION CHECKLIST (you MUST evaluate ALL of these):
-1. SCHEMA COMPLIANCE: Does the dataset structure match the required format across ALL records (not just the first few)?
-2. LICENSE PROVENANCE: Are there any licensing headers, metadata, or attribution fields? Does the content comply with the required license?
-3. SOURCE VERIFICATION: Scan ALL content for artifacts from forbidden/blacklisted sources. Check URLs, domain references, attribution strings, and metadata tags.
+1. SCHEMA COMPLIANCE: Does the dataset structure match the required format across ALL records?
+2. LICENSE PROVENANCE: Are there licensing headers or metadata fields? Does content comply with the required license?
+3. SOURCE VERIFICATION: Scan content for artifacts from forbidden/blacklisted sources.
 4. DATA QUALITY: Is the data real and meaningful (not synthetic garbage, lorem ipsum, or duplicated filler)?
 5. RECORD COUNT: Does the total number of records meet minimum requirements specified in the format criteria?
 6. COMPLETENESS: Is this a complete, deliverable dataset or just a stub/placeholder?
 
 DECISION FRAMEWORK:
-- APPROVED: Schema matches across all records, data is clean and complete, licensing compliance verified, zero blacklisted source artifacts, meets minimum record count.
-- PARTIAL: Minor formatting deviations or slight noise, but core schema, licensing, and provenance are valid. Usable with minor cleanup.
-- REFUND: Broken schema, synthetic garbage, license infringement, contaminated with blacklisted sources, or just a stub/placeholder that doesn't represent a real dataset.
-- ESCALATE: Data is corrupted, unreadable, ambiguous, or requires human technical arbitration.
+- APPROVED: Schema matches across all records, data clean and complete, license verified, zero blacklisted source artifacts.
+- PARTIAL: Minor formatting deviations or slight noise, but core schema, licensing, and provenance are valid.
+- REFUND: Broken schema, synthetic garbage, license infringement, contaminated with blacklisted sources, or stub.
+- ESCALATE: Data corrupted, unreadable, ambiguous, or requires human technical arbitration.
 
 Respond ONLY with valid JSON:
-{{"verdict": "APPROVED|PARTIAL|REFUND|ESCALATE", "confidence": 0-100, "reason": "Detailed whole-dataset provenance audit justification covering all 6 checklist items", "record_count": <int>, "content_size": <int>}}
+{{"verdict": "APPROVED|PARTIAL|REFUND|ESCALATE", "confidence": 0-100, "reason": "Detailed whole-dataset provenance audit justification covering all 6 checklist items"}}
 """
             res = gl.nondet.exec_prompt(prompt, response_format="json")
-            if isinstance(res, dict):
-                return res
-            return self._parse_llm_json(str(res))
+            if not isinstance(res, dict):
+                res = self._parse_llm_json(str(res))
+            
+            res["record_count"] = record_count
+            res["content_size"] = content_size
+            res["computed_spec_hash"] = computed_spec_hash
+            res["computed_dataset_hash"] = computed_dataset_hash
+            return res
 
         def validator_fn(leader_res) -> bool:
             """Consensus verification across validator nodes comparing settlement-affecting verdicts."""
@@ -306,21 +313,10 @@ Respond ONLY with valid JSON:
         if conf < 65:
             reason = f"[Confidence {conf}% < 65%] " + reason
 
-        # Anchor dataset content hash immutably on-chain
-        try:
-            d_res_hash = gl.nondet.web.render(data_str, mode="text")
-            dataset_content = str(d_res_hash)
-            task.dataset_hash = self._compute_content_hash(dataset_content)
-            task.dataset_size_bytes = str(len(dataset_content))
-        except Exception:
-            task.dataset_hash = "FETCH_FAILED"
-            task.dataset_size_bytes = "0"
-
-        # Store AI-reported record count
-        try:
-            task.dataset_record_count = str(int(result.get("record_count", 0)))
-        except Exception:
-            task.dataset_record_count = "0"
+        # Store consensus-verified manifest hashes and metrics
+        task.dataset_hash = str(result.get("computed_dataset_hash", submitted_dataset_hash))
+        task.dataset_size_bytes = str(result.get("content_size", 0))
+        task.dataset_record_count = str(result.get("record_count", 0))
 
         task.verdict = final_verdict
         task.reason = reason
@@ -369,7 +365,10 @@ Respond ONLY with valid JSON:
 
     @gl.public.write
     def finalize_payout(self, task_id: str) -> None:
-        """Disburses escrow funds strictly after 24h cooling-off, with immutable manifest re-verification before fund release."""
+        """
+        Disburses escrow funds strictly after 24h cooling-off when no active dispute exists.
+        Manifest integrity was locked and consensus-verified during submit_dataset.
+        """
         if task_id not in self.tasks:
             raise UserError("Task not found")
         task = self.tasks[task_id]
@@ -383,42 +382,6 @@ Respond ONLY with valid JSON:
         now = self._get_current_timestamp()
         if now < task.payout_ready_at:
             raise UserError("24-hour cooling-off period has not elapsed yet")
-
-        # Immutable Manifest Re-Verification: Verify content hashes before releasing funds
-        # Re-fetch spec and dataset, recompute hashes, compare against anchored values
-        if task.spec_hash and task.spec_url:
-            try:
-                s_res = gl.nondet.web.render(task.spec_url, mode="text")
-                current_spec_hash = self._compute_content_hash(str(s_res))
-                if current_spec_hash != task.spec_hash:
-                    task.status = "ESCALATED"
-                    task.reason = f"[MANIFEST TAMPERED] Specification content changed after bounty creation. Anchored: {task.spec_hash[:16]}..., Current: {current_spec_hash[:16]}... Funds frozen for arbitration."
-                    self.tasks[task_id] = task
-                    raise UserError("Specification manifest integrity check failed — content was modified. Funds frozen for arbitration.")
-            except UserError:
-                raise
-            except Exception as e:
-                task.status = "ESCALATED"
-                task.reason = f"[MANIFEST VERIFY FAILED] Could not re-verify specification at payout time: {str(e)}"
-                self.tasks[task_id] = task
-                raise UserError(f"Specification manifest re-verification failed: {str(e)}")
-
-        if task.dataset_hash and task.dataset_hash != "FETCH_FAILED" and task.dataset_url:
-            try:
-                d_res = gl.nondet.web.render(task.dataset_url, mode="text")
-                current_dataset_hash = self._compute_content_hash(str(d_res))
-                if current_dataset_hash != task.dataset_hash:
-                    task.status = "ESCALATED"
-                    task.reason = f"[MANIFEST TAMPERED] Dataset content changed after AI audit approval. Anchored: {task.dataset_hash[:16]}..., Current: {current_dataset_hash[:16]}... Funds frozen for arbitration."
-                    self.tasks[task_id] = task
-                    raise UserError("Dataset manifest integrity check failed — content was modified after audit. Funds frozen for arbitration.")
-            except UserError:
-                raise
-            except Exception as e:
-                task.status = "ESCALATED"
-                task.reason = f"[MANIFEST VERIFY FAILED] Could not re-verify dataset at payout time: {str(e)}"
-                self.tasks[task_id] = task
-                raise UserError(f"Dataset manifest re-verification failed: {str(e)}")
 
         # All manifest checks passed — proceed with fund disbursement
         escrow = task.escrow_amount

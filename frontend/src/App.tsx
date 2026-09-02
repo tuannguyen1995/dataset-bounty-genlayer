@@ -124,13 +124,14 @@ export function App() {
     taskId: string;
     escrowAmount: string;
     specUrl: string;
+    specHash: string;
     requiredFormat: string;
     blacklistSources: string;
   }) => {
     const escrowWei = BigInt(data.escrowAmount);
     const ok = await handleContractAction(
       'create_bounty',
-      [data.taskId, data.specUrl, data.requiredFormat, data.blacklistSources],
+      [data.taskId, data.specUrl, data.specHash, data.requiredFormat, data.blacklistSources],
       escrowWei,
       `Bounty "${data.taskId}" successfully published on-chain!`
     );

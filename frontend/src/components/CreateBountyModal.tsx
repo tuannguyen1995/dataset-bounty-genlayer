@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, Plus, ShieldCheck, DollarSign, FileText, AlertOctagon, X } from 'lucide-react';
+import { Database, Plus, ShieldCheck, DollarSign, FileText, AlertOctagon, X, Lock } from 'lucide-react';
 
 interface CreateBountyModalProps {
   isOpen: boolean;
@@ -8,6 +8,7 @@ interface CreateBountyModalProps {
     taskId: string;
     escrowAmount: string;
     specUrl: string;
+    specHash: string;
     requiredFormat: string;
     blacklistSources: string;
   }) => Promise<void>;
@@ -23,6 +24,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
   const [taskId, setTaskId] = useState(`bounty_${Date.now().toString(36)}`);
   const [escrowAmount, setEscrowAmount] = useState('1000');
   const [specUrl, setSpecUrl] = useState('https://raw.githubusercontent.com/datasets/specs/python_eval.json');
+  const [specHash, setSpecHash] = useState('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   const [requiredFormat, setRequiredFormat] = useState('JSONL, CC-BY-4.0, Min 10,000 verified code-docstring pairs');
   const [blacklistSources, setBlacklistSources] = useState('scraped_copyright_code, leaked_keys, GPL-3.0_code');
 
@@ -34,6 +36,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
       taskId: taskId.trim(),
       escrowAmount: escrowAmount.trim(),
       specUrl: specUrl.trim(),
+      specHash: specHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       requiredFormat: requiredFormat.trim(),
       blacklistSources: blacklistSources.trim()
     });
@@ -51,7 +54,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Create AI Dataset Bounty</h2>
-              <p className="text-xs text-slate-400">Lock escrow funds & define GenLayer consensus audit rules</p>
+              <p className="text-xs text-slate-400">Lock escrow funds & anchor immutable manifest hash</p>
             </div>
           </div>
           <button
@@ -106,8 +109,24 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
               className="w-full bg-slate-900 border border-slate-800 focus:border-cyan-400 rounded-lg px-3 py-2 text-white outline-none"
               required
             />
+          </div>
+
+          {/* Spec Manifest Hash */}
+          <div>
+            <label className="block text-emerald-400 mb-1 font-semibold flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" />
+              Immutable Spec Manifest SHA-256 Hash
+            </label>
+            <input
+              type="text"
+              value={specHash}
+              onChange={(e) => setSpecHash(e.target.value)}
+              placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              className="w-full bg-slate-900 border border-emerald-500/30 focus:border-emerald-400 rounded-lg px-3 py-2 text-emerald-300 font-mono text-[11px] outline-none"
+              required
+            />
             <span className="text-[10px] text-slate-400 mt-1 block">
-              GenLayer validator nodes web-render this URL to inspect schema & verification criteria.
+              Cryptographically pins specification content at creation time. GenLayer nodes verify this hash during consensus audit.
             </span>
           </div>
 
@@ -139,7 +158,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
             <span className="text-[11px] text-slate-400">
-              Escrow will be locked until 24h cooling-off or dispute resolution.
+              Escrow locked & manifest anchored until 24h cooling-off.
             </span>
             <div className="flex items-center space-x-2">
               <button
@@ -154,7 +173,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
                 disabled={isLoading}
                 className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-cyan-glow transition-all active:scale-95 disabled:opacity-50"
               >
-                {isLoading ? 'Publishing & Escrowing...' : `Publish Bounty (${escrowAmount} GEN)`}
+                {isLoading ? 'Publishing & Anchoring...' : `Publish Bounty (${escrowAmount} GEN)`}
               </button>
             </div>
           </div>

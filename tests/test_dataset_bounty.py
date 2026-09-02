@@ -1,6 +1,7 @@
 import sys
 import os
 import unittest
+import hashlib
 from unittest.mock import MagicMock
 
 class MockAddress(str): pass
@@ -39,7 +40,11 @@ class MockGL:
     class nondet:
         class web:
             @staticmethod
-            def render(url, mode="text"): pass
+            def render(url, mode="text"):
+                if "spec" in url:
+                    return "Dataset Specification JSON Schema"
+                return "Valid JSONL code pairs"
+
         @staticmethod
         def exec_prompt(prompt, response_format="json"): pass
 
@@ -76,6 +81,9 @@ sys.modules["genlayer"] = mock_mod
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "contracts")))
 import DatasetBounty as contract_module
 
+SPEC_MOCK_CONTENT = "Dataset Specification JSON Schema"
+SPEC_MOCK_HASH = hashlib.sha256(SPEC_MOCK_CONTENT.encode()).hexdigest()
+
 class TestDatasetBountyExecutionSuite(unittest.TestCase):
     def setUp(self):
         self.gl = mock_mod.gl
@@ -92,13 +100,14 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
         self.contract.task_ids = []
         self.contract.platform_admin = self.admin.lower()
 
-        # Buyer creates bounty with 1000 GEN escrow
+        # Buyer creates bounty with 1000 GEN escrow & anchored spec hash
         self.tid = "dataset_python_eval_01"
         self.gl.message.sender_address = self.buyer
         self.gl.message.value = MockBigInt(1000)
         self.contract.create_bounty(
             self.tid,
             "https://ai-lab.io/specs/python_eval.json",
+            SPEC_MOCK_HASH,
             "JSONL format, MIT License, 10k verified code-docstring pairs",
             "scraped_copyright_code, leaked_keys"
         )
@@ -116,7 +125,12 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
         self.gl.message.value = MockBigInt(200)
         self.contract.accept_bounty(self.tid)
 
-        self.gl.nondet.web.render = lambda url, mode="text": "Valid JSONL code pairs"
+        def mock_render(url, mode="text"):
+            if "spec" in url:
+                return SPEC_MOCK_CONTENT
+            return "Valid JSONL code pairs"
+
+        self.gl.nondet.web.render = mock_render
         self.gl.nondet.exec_prompt = lambda p, response_format="json": {
             "verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License compliant"
         }
@@ -142,7 +156,12 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
         self.gl.message.value = MockBigInt(200)
         self.contract.accept_bounty(self.tid)
 
-        self.gl.nondet.web.render = lambda url, mode="text": "Valid dataset sample"
+        def mock_render(url, mode="text"):
+            if "spec" in url:
+                return SPEC_MOCK_CONTENT
+            return "Valid dataset sample"
+
+        self.gl.nondet.web.render = mock_render
         self.gl.nondet.exec_prompt = lambda p, response_format="json": {"verdict": "APPROVED", "confidence": 95, "reason": "OK"}
         self.contract.submit_dataset(self.tid, "https://storage.io/sample.jsonl")
 
@@ -174,7 +193,12 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
         self.gl.message.value = MockBigInt(200)
         self.contract.accept_bounty(self.tid)
 
-        self.gl.nondet.web.render = lambda url, mode="text": "Corrupted non-JSONL data"
+        def mock_render(url, mode="text"):
+            if "spec" in url:
+                return SPEC_MOCK_CONTENT
+            return "Corrupted non-JSONL data"
+
+        self.gl.nondet.web.render = mock_render
         self.gl.nondet.exec_prompt = lambda p, response_format="json": {"verdict": "REFUND", "confidence": 100, "reason": "Malformed syntax"}
 
         # Attempt 1: revision required
