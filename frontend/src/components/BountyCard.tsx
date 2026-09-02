@@ -102,6 +102,11 @@ export const BountyCard: React.FC<BountyCardProps> = ({
                   Attempt #{task.attempts}/2
                 </span>
               )}
+              {task.spec_hash && (
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded" title={`Spec SHA-256: ${task.spec_hash}`}>
+                  🔒 Manifest
+                </span>
+              )}
             </div>
             <h3 className="text-base font-bold text-white line-clamp-1 group-hover:text-emerald-300 transition-colors">
               {task.required_format.split(',')[0] || 'AI Dataset Bounty'}

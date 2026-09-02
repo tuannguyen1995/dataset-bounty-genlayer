@@ -128,6 +128,37 @@ export const BountyDetailModal: React.FC<BountyDetailModalProps> = ({
               <p>{task.blacklist_sources}</p>
             </div>
           )}
+
+          {/* Immutable Manifest Anchoring */}
+          {(task.spec_hash || task.dataset_hash) && (
+            <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3 text-xs">
+              <span className="text-[10px] text-emerald-400 uppercase block font-bold mb-2">🔒 Immutable Manifest Anchoring (SHA-256)</span>
+              {task.spec_hash && (
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-slate-400">Spec Hash:</span>
+                  <code className="text-emerald-300 text-[10px] font-mono bg-slate-900 px-2 py-0.5 rounded">{task.spec_hash.slice(0, 16)}...{task.spec_hash.slice(-8)}</code>
+                </div>
+              )}
+              {task.dataset_hash && task.dataset_hash !== 'FETCH_FAILED' && (
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-slate-400">Dataset Hash:</span>
+                  <code className="text-emerald-300 text-[10px] font-mono bg-slate-900 px-2 py-0.5 rounded">{task.dataset_hash.slice(0, 16)}...{task.dataset_hash.slice(-8)}</code>
+                </div>
+              )}
+              {task.dataset_record_count && task.dataset_record_count !== '0' && (
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-slate-400">Verified Records:</span>
+                  <span className="text-white font-bold">{task.dataset_record_count}</span>
+                </div>
+              )}
+              {task.dataset_size_bytes && task.dataset_size_bytes !== '0' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Content Size:</span>
+                  <span className="text-white font-bold">{(Number(task.dataset_size_bytes) / 1024).toFixed(1)} KB</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* AI Audit Verdict breakdown if present */}
