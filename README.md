@@ -165,8 +165,8 @@ python scripts/verify_contract.py
 https://dataset-bounty-genlayer.vercel.app
 
 ## Deployed Contract
-- **Address**: `0xf219bf040d7bb6291b7E822411A46116C4125e0F`
-- **GenLayer Explorer**: https://explorer-studio.genlayer.com/address/0xf219bf040d7bb6291b7E822411A46116C4125e0F
+- **Address**: `0x3e763A88711A05A35988808C99ff060229f6664a`
+- **GenLayer Explorer**: https://explorer-studio.genlayer.com/address/0x3e763A88711A05A35988808C99ff060229f6664a
 
 ---
 

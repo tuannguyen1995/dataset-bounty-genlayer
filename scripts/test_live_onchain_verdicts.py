@@ -1,6 +1,7 @@
 import sys
 import os
 import unittest
+import hashlib
 from unittest.mock import MagicMock
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -21,7 +22,10 @@ class MockContractStub:
         self.tracker = tracker
 
     def emit_transfer(self, value):
-        self.tracker.append({"to": self.address, "value": int(value)})
+        self.tracker.append({"to": self.address, "value": value})
+
+SPEC_CONTENT = "Clean dataset specification JSON schema content"
+SPEC_HASH = hashlib.sha256(SPEC_CONTENT.encode()).hexdigest()
 
 class MockGL:
     class Contract:
@@ -43,7 +47,11 @@ class MockGL:
     class nondet:
         class web:
             @staticmethod
-            def render(url, mode="text"): pass
+            def render(url, mode="text"):
+                if "spec" in url:
+                    return SPEC_CONTENT
+                return "Sample dataset content"
+
         @staticmethod
         def exec_prompt(prompt, response_format="json"): pass
 
@@ -59,7 +67,7 @@ class MockGL:
 
     def __init__(self):
         self.transfers = []
-        self.message_raw = {"datetime": "2026-08-24T00:00:00+00:00"}
+        self.message_raw = {"datetime": "2026-08-23T00:00:00+00:00"}
 
     def get_contract_at(self, address):
         return MockContractStub(address, self.transfers)
@@ -83,7 +91,7 @@ import DatasetBounty as contract_module
 def run_comprehensive_verdicts_test():
     print("=" * 75)
     print(" 🛡️ DatasetBounty Protocol: Full On-Chain Settlement & Arbitration Test Suite ")
-    print(" Target Contract: 0xf219bf040d7bb6291b7E822411A46116C4125e0F ")
+    print(" Target Contract: 0x3e763A88711A05A35988808C99ff060229f6664a ")
     print("=" * 75)
 
     gl = mock_mod.gl
@@ -110,7 +118,7 @@ def run_comprehensive_verdicts_test():
     t1_id = "test_approved_flow_01"
     gl.message.sender_address = buyer
     gl.message.value = MockBigInt(1000)
-    contract.create_bounty(t1_id, "https://ai-lab.io/spec.json", "JSONL, MIT", "scraped_domain")
+    contract.create_bounty(t1_id, "https://ai-lab.io/spec.json", SPEC_HASH, "JSONL, MIT", "scraped_domain")
     print(f"   ✓ Step 1: Created Bounty task '{t1_id}' (Escrow: 1000 GEN)")
 
     gl.message.sender_address = contributor
@@ -118,7 +126,7 @@ def run_comprehensive_verdicts_test():
     contract.accept_bounty(t1_id)
     print(f"   ✓ Step 2: Contributor accepted with 20% stake (200 GEN)")
 
-    gl.nondet.web.render = lambda *args, **kwargs: "Clean dataset content"
+    gl.nondet.web.render = lambda url, mode="text": SPEC_CONTENT if "spec" in url else "Clean dataset content"
     gl.nondet.exec_prompt = lambda *args, **kwargs: {"verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License match"}
     contract.submit_dataset(t1_id, "https://storage.io/dataset_sample.jsonl")
     print(f"   ✓ Step 3: AI Audit Verdict: APPROVED (98% Conf) -> Status: AWAITING_PAYOUT")
@@ -143,7 +151,7 @@ def run_comprehensive_verdicts_test():
     t2_id = "test_partial_flow_02"
     gl.message.sender_address = buyer
     gl.message.value = MockBigInt(1000)
-    contract.create_bounty(t2_id, "https://ai-lab.io/spec2.json", "JSONL, Apache-2.0", "noise_sources")
+    contract.create_bounty(t2_id, "https://ai-lab.io/spec2.json", SPEC_HASH, "JSONL, Apache-2.0", "noise_sources")
 
     gl.message.sender_address = contributor
     gl.message.value = MockBigInt(200)
@@ -171,7 +179,7 @@ def run_comprehensive_verdicts_test():
     t3_id = "test_slashing_flow_03"
     gl.message.sender_address = buyer
     gl.message.value = MockBigInt(1000)
-    contract.create_bounty(t3_id, "https://ai-lab.io/spec3.json", "Parquet, CC-BY-4.0", "darkweb_dumps")
+    contract.create_bounty(t3_id, "https://ai-lab.io/spec3.json", SPEC_HASH, "Parquet, CC-BY-4.0", "darkweb_dumps")
 
     gl.message.sender_address = contributor
     gl.message.value = MockBigInt(200)
@@ -203,7 +211,7 @@ def run_comprehensive_verdicts_test():
     t4_id = "test_dispute_flow_04"
     gl.message.sender_address = buyer
     gl.message.value = MockBigInt(1000)
-    contract.create_bounty(t4_id, "https://ai-lab.io/spec4.json", "JSONL, MIT", "scraped_data")
+    contract.create_bounty(t4_id, "https://ai-lab.io/spec4.json", SPEC_HASH, "JSONL, MIT", "scraped_data")
 
     gl.message.sender_address = contributor
     gl.message.value = MockBigInt(200)
@@ -228,7 +236,7 @@ def run_comprehensive_verdicts_test():
 
     print("\n" + "=" * 75)
     print(" 🎉 ALL 4 ON-CHAIN SETTLEMENT & ARBITRATION SCENARIOS PASSED 100%! ")
-    print(" Protocol Contract Target: 0xf219bf040d7bb6291b7E822411A46116C4125e0F ")
+    print(" Protocol Contract Target: 0x3e763A88711A05A35988808C99ff060229f6664a ")
     print("=" * 75)
 
 if __name__ == "__main__":
