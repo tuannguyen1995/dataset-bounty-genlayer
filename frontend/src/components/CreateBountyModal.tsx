@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, Plus, ShieldCheck, DollarSign, FileText, AlertOctagon, X, Lock } from 'lucide-react';
+import { Database, Plus, ShieldCheck, DollarSign, FileText, AlertOctagon, X, Lock, AlertTriangle, Wallet } from 'lucide-react';
 
 interface CreateBountyModalProps {
   isOpen: boolean;
@@ -13,13 +13,19 @@ interface CreateBountyModalProps {
     blacklistSources: string;
   }) => Promise<void>;
   isLoading: boolean;
+  account?: string | null;
+  connectWallet?: () => void;
+  error?: string | null;
 }
 
 export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  isLoading
+  isLoading,
+  account,
+  connectWallet,
+  error
 }) => {
   const [taskId, setTaskId] = useState(`bounty_${Date.now().toString(36)}`);
   const [escrowAmount, setEscrowAmount] = useState('1000');
@@ -27,24 +33,38 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
   const [specHash, setSpecHash] = useState('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   const [requiredFormat, setRequiredFormat] = useState('JSONL, CC-BY-4.0, Min 10,000 verified code-docstring pairs');
   const [blacklistSources, setBlacklistSources] = useState('scraped_copyright_code, leaked_keys, GPL-3.0_code');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit({
-      taskId: taskId.trim(),
-      escrowAmount: escrowAmount.trim(),
-      specUrl: specUrl.trim(),
-      specHash: specHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      requiredFormat: requiredFormat.trim(),
-      blacklistSources: blacklistSources.trim()
-    });
+    setLocalError(null);
+
+    let cleanSpecUrl = specUrl.trim();
+    if (!cleanSpecUrl.startsWith('http://') && !cleanSpecUrl.startsWith('https://')) {
+      cleanSpecUrl = 'https://' + cleanSpecUrl;
+    }
+
+    try {
+      await onSubmit({
+        taskId: taskId.trim(),
+        escrowAmount: escrowAmount.trim(),
+        specUrl: cleanSpecUrl,
+        specHash: specHash.trim() || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        requiredFormat: requiredFormat.trim(),
+        blacklistSources: blacklistSources.trim()
+      });
+    } catch (err: any) {
+      setLocalError(err?.message || "Failed to submit bounty transaction");
+    }
   };
+
+  const displayError = localError || error;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="glass-panel w-full max-w-xl p-6 rounded-2xl border border-slate-700 shadow-2xl relative overflow-hidden">
+      <div className="glass-panel w-full max-w-xl p-6 rounded-2xl border border-slate-700 shadow-2xl relative overflow-hidden max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -64,6 +84,34 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Wallet Not Connected Warning Banner */}
+        {!account && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-mono text-amber-300">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>Wallet is not connected.</span>
+            </div>
+            {connectWallet && (
+              <button
+                type="button"
+                onClick={connectWallet}
+                className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-all shrink-0"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>Connect Now</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {displayError && (
+          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center space-x-2 text-xs font-mono text-rose-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+            <span>{displayError}</span>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs font-mono">
@@ -98,11 +146,11 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
             </div>
           </div>
 
-          {/* Spec URL */}
+          {/* Spec URL (type="text" with auto https fallback) */}
           <div>
             <label className="block text-slate-400 mb-1 font-semibold">Dataset Specification HTTP/HTTPS URL</label>
             <input
-              type="url"
+              type="text"
               value={specUrl}
               onChange={(e) => setSpecUrl(e.target.value)}
               placeholder="https://..."
@@ -171,7 +219,7 @@ export const CreateBountyModal: React.FC<CreateBountyModalProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-cyan-glow transition-all active:scale-95 disabled:opacity-50"
+                className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-cyan-glow transition-all active:scale-95 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               >
                 {isLoading ? 'Publishing & Anchoring...' : `Publish Bounty (${escrowAmount} GEN)`}
               </button>

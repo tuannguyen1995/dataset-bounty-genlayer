@@ -65,11 +65,15 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
 
   let rawData: any;
   try {
-    rawData = await (client as any).readContract({
+    const readPromise = (client as any).readContract({
       address: contractAddress,
       functionName: 'get_all_tasks',
       args: []
     });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("RPC Request Timeout (10s)")), 10000)
+    );
+    rawData = await Promise.race([readPromise, timeoutPromise]);
   } catch (e: any) {
     console.error(`[Contract Read Error] RPC call get_all_tasks on ${contractAddress} failed:`, e);
     throw new Error(`Contract read failed for address ${contractAddress}: ${e?.message || 'RPC Request Failed'}`);

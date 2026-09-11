@@ -162,6 +162,11 @@ export function App() {
     requiredFormat: string;
     blacklistSources: string;
   }) => {
+    if (!account) {
+      showToast("Please connect your wallet first before publishing a bounty!", 'error');
+      await connectWallet();
+      return;
+    }
     const escrowWei = BigInt(data.escrowAmount);
     const ok = await handleContractAction(
       'create_bounty',
@@ -537,6 +542,9 @@ export function App() {
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateBounty}
         isLoading={isLoading}
+        account={account}
+        connectWallet={connectWallet}
+        error={actionError}
       />
 
       <BountyDetailModal
