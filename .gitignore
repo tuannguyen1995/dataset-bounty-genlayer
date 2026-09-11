@@ -31,5 +31,9 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
+# Python
+__pycache__/
+*.pyc
+
 .vercel
 .env*
