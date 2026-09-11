@@ -130,10 +130,13 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
                 return SPEC_MOCK_CONTENT
             return "Valid JSONL code pairs"
 
+        def mock_exec_prompt(prompt, response_format="json"):
+            if "Independent Pre-Payout" in prompt:
+                return {"verified": True, "reason": "Pre-payout verification passed"}
+            return {"verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License compliant"}
+
         self.gl.nondet.web.render = mock_render
-        self.gl.nondet.exec_prompt = lambda p, response_format="json": {
-            "verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License compliant"
-        }
+        self.gl.nondet.exec_prompt = mock_exec_prompt
 
         self.contract.submit_dataset(self.tid, "https://storage.io/dataset_sample.jsonl")
         self.assertEqual(self.contract.tasks[self.tid].status, "AWAITING_PAYOUT")
@@ -161,8 +164,13 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
                 return SPEC_MOCK_CONTENT
             return "Valid dataset sample"
 
+        def mock_exec_prompt(prompt, response_format="json"):
+            if "Independent Pre-Payout" in prompt:
+                return {"verified": True, "reason": "Pre-payout verification passed"}
+            return {"verdict": "APPROVED", "confidence": 95, "reason": "OK"}
+
         self.gl.nondet.web.render = mock_render
-        self.gl.nondet.exec_prompt = lambda p, response_format="json": {"verdict": "APPROVED", "confidence": 95, "reason": "OK"}
+        self.gl.nondet.exec_prompt = mock_exec_prompt
         self.contract.submit_dataset(self.tid, "https://storage.io/sample.jsonl")
 
         # Buyer raises dispute at T+12h
@@ -198,8 +206,13 @@ class TestDatasetBountyExecutionSuite(unittest.TestCase):
                 return SPEC_MOCK_CONTENT
             return "Corrupted non-JSONL data"
 
+        def mock_exec_prompt(prompt, response_format="json"):
+            if "Independent Pre-Payout" in prompt:
+                return {"verified": True, "reason": "Pre-payout verification passed"}
+            return {"verdict": "REFUND", "confidence": 100, "reason": "Malformed syntax"}
+
         self.gl.nondet.web.render = mock_render
-        self.gl.nondet.exec_prompt = lambda p, response_format="json": {"verdict": "REFUND", "confidence": 100, "reason": "Malformed syntax"}
+        self.gl.nondet.exec_prompt = mock_exec_prompt
 
         # Attempt 1: revision required
         self.contract.submit_dataset(self.tid, "https://storage.io/fail1.jsonl")

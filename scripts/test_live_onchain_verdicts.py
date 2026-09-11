@@ -127,7 +127,7 @@ def run_comprehensive_verdicts_test():
     print(f"   ✓ Step 2: Contributor accepted with 20% stake (200 GEN)")
 
     gl.nondet.web.render = lambda url, mode="text": SPEC_CONTENT if "spec" in url else "Clean dataset content"
-    gl.nondet.exec_prompt = lambda *args, **kwargs: {"verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License match"}
+    gl.nondet.exec_prompt = lambda prompt, *args, **kwargs: {"verified": True, "reason": "Pre-payout verification passed"} if "Independent Pre-Payout" in str(prompt) else {"verdict": "APPROVED", "confidence": 98, "reason": "100% Schema & License match"}
     contract.submit_dataset(t1_id, "https://storage.io/dataset_sample.jsonl")
     print(f"   ✓ Step 3: AI Audit Verdict: APPROVED (98% Conf) -> Status: AWAITING_PAYOUT")
 
@@ -157,7 +157,7 @@ def run_comprehensive_verdicts_test():
     gl.message.value = MockBigInt(200)
     contract.accept_bounty(t2_id)
 
-    gl.nondet.exec_prompt = lambda *args, **kwargs: {"verdict": "PARTIAL", "confidence": 85, "reason": "Minor formatting noise, core usable"}
+    gl.nondet.exec_prompt = lambda prompt, *args, **kwargs: {"verified": True, "reason": "Passed pre-payout"} if "Independent Pre-Payout" in str(prompt) else {"verdict": "PARTIAL", "confidence": 85, "reason": "Minor formatting noise, core usable"}
     contract.submit_dataset(t2_id, "https://storage.io/partial_sample.jsonl")
     print(f"   ✓ Step 1: AI Audit Verdict: PARTIAL (85% Conf) -> Status: AWAITING_PAYOUT")
 
