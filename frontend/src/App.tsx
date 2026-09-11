@@ -8,6 +8,7 @@ import {
   fetchAllTasks, 
   executeContractWrite, 
   getContractAddress,
+  ensureCorrectNetwork,
   CONTRACT_ADDRESS 
 } from './config/genlayer';
 import { Header } from './components/Header';
@@ -61,6 +62,7 @@ export function App() {
   const connectWallet = async () => {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       try {
+        await ensureCorrectNetwork();
         const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
         if (accounts && accounts.length > 0) {
           setAccount(accounts[0]);

@@ -94,6 +94,41 @@ export async function fetchAllTasks(contractAddress: string = getContractAddress
   return parsed as DatasetTask[];
 }
 
+// Ensure browser wallet is connected to GenLayer Studionet (Chain ID: 61999 / 0xf22f)
+export async function ensureCorrectNetwork(): Promise<void> {
+  if (typeof window === 'undefined' || !(window as any).ethereum) return;
+  const targetChainIdHex = `0x${studionet.id.toString(16)}`; // '0xf22f' (61999)
+  try {
+    await (window as any).ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: targetChainIdHex }],
+    });
+  } catch (switchError: any) {
+    if (switchError.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+      try {
+        await (window as any).ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: targetChainIdHex,
+              chainName: 'GenLayer Studio Network',
+              rpcUrls: ['https://studio.genlayer.com/api'],
+              nativeCurrency: {
+                name: 'GEN Token',
+                symbol: 'GEN',
+                decimals: 18,
+              },
+              blockExplorerUrls: ['https://studio.genlayer.com'],
+            },
+          ],
+        });
+      } catch (addError: any) {
+        console.warn('Failed to add GenLayer network automatically:', addError);
+      }
+    }
+  }
+}
+
 // 2. GHI TRANSACTION: CHẶN ĐỨNG HOÀN TOÀN MỌI UNCONFIRMED/FAILED RECEIPT
 export async function executeContractWrite(
   methodName: string,
@@ -105,6 +140,8 @@ export async function executeContractWrite(
   if (typeof window === 'undefined' || !(window as any).ethereum) {
     throw new Error("MetaMask or an EIP-1193 compatible browser wallet is required.");
   }
+
+  await ensureCorrectNetwork();
 
   let activeAccount = callerAccount;
   if (!activeAccount) {
