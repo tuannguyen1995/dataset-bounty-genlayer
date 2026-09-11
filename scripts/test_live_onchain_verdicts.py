@@ -91,7 +91,7 @@ import DatasetBounty as contract_module
 def run_comprehensive_verdicts_test():
     print("=" * 75)
     print(" 🛡️ DatasetBounty Protocol: Full On-Chain Settlement & Arbitration Test Suite ")
-    print(" Target Contract: 0x3e763A88711A05A35988808C99ff060229f6664a ")
+    print(" Target Contract: 0xfFE69F89AD1c040863D6D12Bc8c4DFc31a8aE8Fd ")
     print("=" * 75)
 
     gl = mock_mod.gl
@@ -236,7 +236,7 @@ def run_comprehensive_verdicts_test():
 
     print("\n" + "=" * 75)
     print(" 🎉 ALL 4 ON-CHAIN SETTLEMENT & ARBITRATION SCENARIOS PASSED 100%! ")
-    print(" Protocol Contract Target: 0x3e763A88711A05A35988808C99ff060229f6664a ")
+    print(" Protocol Contract Target: 0xfFE69F89AD1c040863D6D12Bc8c4DFc31a8aE8Fd ")
     print("=" * 75)
 
 if __name__ == "__main__":
