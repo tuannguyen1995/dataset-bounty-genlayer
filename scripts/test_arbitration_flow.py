@@ -1,5 +1,6 @@
 import sys
 import os
+import hashlib
 import unittest
 from unittest.mock import MagicMock
 
@@ -102,6 +103,9 @@ def run_full_onchain_arbitration_test():
 
     task_id = "bounty_arbitration_live_test_01"
 
+    spec_content = "Dataset Specification JSON Schema"
+    spec_hash = hashlib.sha256(spec_content.encode()).hexdigest()
+
     # Step 1: Create Bounty with 1000 GEN Escrow
     print("\n[Step 1] AI Lab Creates Bounty Task...")
     gl.message.sender_address = buyer
@@ -109,6 +113,7 @@ def run_full_onchain_arbitration_test():
     contract.create_bounty(
         task_id,
         "https://ai-lab.io/specs/code_eval.json",
+        spec_hash,
         "JSONL format, MIT License, 10,000 verified code pairs",
         "scraped_copyright_code, leaked_keys"
     )
@@ -127,7 +132,11 @@ def run_full_onchain_arbitration_test():
 
     # Step 3: Contributor Submits Dataset Sample & Triggers AI Consensus Quality Audit
     print("\n[Step 3] Submitting Dataset Sample & Triggering GenLayer AI Consensus Audit...")
-    gl.nondet.web.render = lambda url, mode="text": "Valid JSONL code pairs dataset stream"
+    def mock_render(url, mode="text"):
+        if "spec" in url:
+            return spec_content
+        return "Valid JSONL code pairs dataset stream"
+    gl.nondet.web.render = mock_render
     gl.nondet.exec_prompt = lambda p, response_format="json": {
         "verdict": "APPROVED",
         "confidence": 98,
