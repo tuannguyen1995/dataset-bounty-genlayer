@@ -434,7 +434,7 @@ Respond ONLY with valid JSON:
                 parsed = json.loads(str(res).strip())
                 return parsed
             except Exception:
-                return {"verified": True, "reason": "Pre-payout independent verification completed"}
+                return {"verified": False, "reason": "FAIL-CLOSED: Pre-payout parsing failed"}
 
         def pre_payout_validator_fn(leader_res) -> bool:
             if not isinstance(leader_res, gl.vm.Return):
@@ -446,6 +446,8 @@ Respond ONLY with valid JSON:
                 except Exception:
                     leader_data = {"verified": False}
             mine_data = pre_payout_leader_fn()
+            if not isinstance(mine_data, dict):
+                return False
             return bool(leader_data.get("verified", False)) == bool(mine_data.get("verified", False))
 
         payout_check = gl.vm.run_nondet(pre_payout_leader_fn, pre_payout_validator_fn)
