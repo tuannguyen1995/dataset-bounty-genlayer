@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Shield, Wallet, Cpu, Settings, RefreshCw, Terminal, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Shield, Wallet, Cpu, Settings, RefreshCw, Terminal, AlertTriangle, CheckCircle2, LogOut } from 'lucide-react';
 import { getContractAddress, setContractAddress } from '../config/genlayer';
 
 interface HeaderProps {
   account: string | null;
   connectWallet: () => void;
+  disconnectWallet: () => void;
   onRefresh: () => void;
   isLoading: boolean;
   isAdmin: boolean;
@@ -15,6 +16,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   account,
   connectWallet,
+  disconnectWallet,
   onRefresh,
   isLoading,
   isAdmin,
@@ -98,11 +100,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{isAdmin ? 'Admin: ON' : 'User'}</span>
             </button>
 
-            {/* Connect Wallet / Profile */}
+            {/* Connect Wallet / Profile & Disconnect */}
             {account ? (
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-emerald-950/40 to-obsidian-900 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl text-xs font-mono text-emerald-300">
-                <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-bold">{account.slice(0, 6)}...{account.slice(-4)}</span>
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 bg-gradient-to-r from-emerald-950/40 to-obsidian-900 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl text-xs font-mono text-emerald-300">
+                  <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="font-bold">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                </div>
+                <button
+                  onClick={disconnectWallet}
+                  className="p-2 rounded-xl bg-obsidian-900 border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/60 transition-all flex items-center gap-1 text-xs font-mono font-bold"
+                  title="Disconnect Wallet"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Disconnect</span>
+                </button>
               </div>
             ) : (
               <button

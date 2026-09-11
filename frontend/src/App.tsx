@@ -50,12 +50,21 @@ export function App() {
     setTimeout(() => setNotification(null), 6000);
   };
 
+  const disconnectWallet = () => {
+    setAccount(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dataset_bounty_wallet_connected');
+    }
+    showToast("Wallet disconnected.", 'info');
+  };
+
   const connectWallet = async () => {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       try {
         const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
         if (accounts && accounts.length > 0) {
           setAccount(accounts[0]);
+          localStorage.setItem('dataset_bounty_wallet_connected', 'true');
           showToast(`Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, 'success');
         }
       } catch (err: any) {
@@ -63,6 +72,21 @@ export function App() {
       }
     } else {
       showToast("MetaMask is required to interact with GenLayer Studionet.", 'error');
+    }
+  };
+
+  // Auto-reconnect connected wallet on F5 refresh
+  const autoConnectWalletOnMount = async () => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      try {
+        const accounts = await (window as any).ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          setAccount(accounts[0]);
+          localStorage.setItem('dataset_bounty_wallet_connected', 'true');
+        }
+      } catch (e) {
+        console.warn("Auto wallet check failed:", e);
+      }
     }
   };
 
@@ -84,9 +108,19 @@ export function App() {
 
   useEffect(() => {
     loadContractData();
+    autoConnectWalletOnMount();
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       (window as any).ethereum.on?.('accountsChanged', (accs: string[]) => {
-        setAccount(accs[0] || null);
+        if (accs && accs.length > 0) {
+          setAccount(accs[0]);
+          localStorage.setItem('dataset_bounty_wallet_connected', 'true');
+        } else {
+          setAccount(null);
+          localStorage.removeItem('dataset_bounty_wallet_connected');
+        }
+      });
+      (window as any).ethereum.on?.('chainChanged', () => {
+        window.location.reload();
       });
     }
   }, []);
@@ -254,6 +288,7 @@ export function App() {
       <Header
         account={account}
         connectWallet={connectWallet}
+        disconnectWallet={disconnectWallet}
         onRefresh={loadContractData}
         isLoading={isLoading}
         isAdmin={isAdmin}
