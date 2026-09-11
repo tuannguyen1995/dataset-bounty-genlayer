@@ -32,13 +32,20 @@ export function setContractAddress(address: string): void {
 }
 
 // Initialize GenLayer Web3 Client with EIP-1193 window.ethereum provider
-export function getGenLayerClient() {
+export function getGenLayerClient(accountAddress?: string | null) {
   if (typeof window !== 'undefined' && (window as any).ethereum) {
     try {
-      return createClient({
+      const config: any = {
         chain: studionetChain as any,
         provider: (window as any).ethereum,
-      });
+      };
+      if (accountAddress) {
+        config.account = {
+          address: accountAddress as `0x${string}`,
+          type: 'json-rpc',
+        };
+      }
+      return createClient(config);
     } catch (e) {
       console.warn("Failed to initialize genlayer-js custom transport:", e);
     }
@@ -109,29 +116,40 @@ export async function executeContractWrite(
   methodName: string,
   args: any[],
   valueInGen: bigint = BigInt(0),
-  contractAddress: string = getContractAddress()
+  contractAddress: string = getContractAddress(),
+  callerAccount?: string | null
 ): Promise<DatasetTask[]> {
-  const client = getGenLayerClient();
-  
-  if (!client || !(window as any).ethereum) {
+  if (typeof window === 'undefined' || !(window as any).ethereum) {
     throw new Error("MetaMask or an EIP-1193 compatible browser wallet is required.");
   }
 
-  const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
-  if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Web3 account detected in browser wallet.");
+  let activeAccount = callerAccount;
+  if (!activeAccount) {
+    const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || accounts.length === 0) {
+      throw new Error("No connected Web3 account detected in browser wallet.");
+    }
+    activeAccount = accounts[0];
   }
 
-  console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN`);
+  const client = getGenLayerClient(activeAccount);
+
+  console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN, account: ${activeAccount}`);
+
+  const accountObj = {
+    address: activeAccount as `0x${string}`,
+    type: 'json-rpc'
+  };
 
   // Step 1: Dispatch write transaction
   let txHash: string;
   try {
     txHash = await (client as any).writeContract({
-      address: contractAddress,
+      address: contractAddress as `0x${string}`,
       functionName: methodName,
       args: args,
       value: valueInGen,
+      account: accountObj as any,
     });
   } catch (writeErr: any) {
     console.error(`[GenLayer Tx Submission Error] ${methodName} failed to submit:`, writeErr);
@@ -147,7 +165,10 @@ export async function executeContractWrite(
   // Step 2: Wait for finality & receipt confirmation
   let receipt: any;
   try {
-    receipt = await (client as any).waitForTransactionReceipt({ hash: txHash });
+    receipt = await (client as any).waitForTransactionReceipt({ 
+      hash: txHash,
+      status: 'ACCEPTED' as any
+    });
   } catch (waitErr: any) {
     console.error(`[GenLayer Tx Receipt Error] ${methodName} receipt wait failed:`, waitErr);
     throw new Error(`Failed while waiting for transaction receipt (${txHash}): ${waitErr?.message || waitErr}`);
@@ -155,17 +176,18 @@ export async function executeContractWrite(
 
   console.log(`[GenLayer Tx] Finality receipt received:`, receipt);
 
-  // Step 3: Hard-gate: MUST fail explicitly if receipt is missing or status != 'success'
+  // Step 3: Hard-gate: MUST fail explicitly if receipt is missing or status != 'success' / 'accepted'
   if (!receipt) {
     throw new Error(`Critical: Transaction receipt is missing for hash ${txHash}. Halting success path.`);
   }
 
-  const statusStr = String(receipt.status ?? '').toLowerCase().trim();
+  const statusStr = String(receipt.statusName || receipt.status || '').toLowerCase().trim();
   const isConfirmedSuccess = 
     statusStr === 'success' || 
+    statusStr === 'accepted' || 
+    statusStr === 'finalized' || 
     statusStr === '1' || 
     statusStr === '0x1' || 
-    statusStr === 'finalized' || 
     receipt.status === 1 || 
     receipt.status === true;
 

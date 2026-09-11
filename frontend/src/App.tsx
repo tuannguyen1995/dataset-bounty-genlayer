@@ -136,7 +136,7 @@ export function App() {
     setTxSuccessMsg(null);
     setIsLoading(true);
     try {
-      const updatedTasks = await executeContractWrite(fnName, args, val);
+      const updatedTasks = await executeContractWrite(fnName, args, val, getContractAddress(), account);
       setTasks(updatedTasks); // Cập nhật 100% từ Contract State mới
       const msg = onSuccessMsg || `Action "${fnName}" confirmed on-chain successfully!`;
       setTxSuccessMsg(msg);
