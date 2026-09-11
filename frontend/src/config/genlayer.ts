@@ -1,24 +1,12 @@
-import { createClient, chains } from 'genlayer-js';
+import { createClient } from 'genlayer-js';
+import { studionet } from 'genlayer-js/chains';
 import { DatasetTask } from '../types/bounty';
 
 export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xfFE69F89AD1c040863D6D12Bc8c4DFc31a8aE8Fd";
 export const STUDIONET_RPC = import.meta.env.VITE_GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
 export const IS_DEV_MOCK = import.meta.env.VITE_ENABLE_DEV_MOCK === "true";
 
-export const studionetChain = chains?.studionet || {
-  id: 61998,
-  name: 'Studionet',
-  rpcUrls: {
-    default: {
-      http: [STUDIONET_RPC]
-    }
-  },
-  nativeCurrency: {
-    name: 'GenLayer GEN',
-    symbol: 'GEN',
-    decimals: 18
-  }
-};
+export const studionetChain = studionet;
 
 export function getContractAddress(): string {
   if (typeof window === 'undefined') return CONTRACT_ADDRESS;
@@ -32,20 +20,15 @@ export function setContractAddress(address: string): void {
 }
 
 // Initialize GenLayer Web3 Client with EIP-1193 window.ethereum provider
-export function getGenLayerClient(accountAddress?: string | null) {
+// IMPORTANT: Keep config.account undefined on createClient so typeof config.account !== 'object'
+// evaluates to true (isAddress = true) in customTransport, routing eth_sendTransaction to MetaMask.
+export function getGenLayerClient() {
   if (typeof window !== 'undefined' && (window as any).ethereum) {
     try {
-      const config: any = {
-        chain: studionetChain as any,
+      return createClient({
+        chain: studionet,
         provider: (window as any).ethereum,
-      };
-      if (accountAddress) {
-        config.account = {
-          address: accountAddress as `0x${string}`,
-          type: 'json-rpc',
-        };
-      }
-      return createClient(config);
+      });
     } catch (e) {
       console.warn("Failed to initialize genlayer-js custom transport:", e);
     }
@@ -53,7 +36,7 @@ export function getGenLayerClient(accountAddress?: string | null) {
   
   // Read-only client for fetching contract state from Studionet RPC
   return createClient({
-    chain: studionetChain as any,
+    chain: studionet,
     endpoint: STUDIONET_RPC,
   });
 }
@@ -132,14 +115,9 @@ export async function executeContractWrite(
     activeAccount = accounts[0];
   }
 
-  const client = getGenLayerClient(activeAccount);
+  const client = getGenLayerClient();
 
   console.log(`[GenLayer Tx] Invoking ${methodName} on ${contractAddress} with args:`, args, `value: ${valueInGen} GEN, account: ${activeAccount}`);
-
-  const accountObj = {
-    address: activeAccount as `0x${string}`,
-    type: 'json-rpc'
-  };
 
   // Step 1: Dispatch write transaction
   let txHash: string;
@@ -149,7 +127,7 @@ export async function executeContractWrite(
       functionName: methodName,
       args: args,
       value: valueInGen,
-      account: accountObj as any,
+      account: activeAccount ? ({ address: activeAccount as `0x${string}` } as any) : undefined,
     });
   } catch (writeErr: any) {
     console.error(`[GenLayer Tx Submission Error] ${methodName} failed to submit:`, writeErr);
