@@ -4,6 +4,7 @@ import {
   CheckCircle2, XCircle, User, ArrowRight, Eye, ShieldAlert, Zap, Layers 
 } from 'lucide-react';
 import { DatasetTask } from '../types/bounty';
+import { formatGenAmount } from '../config/genlayer';
 
 interface BountyCardProps {
   task: DatasetTask;
@@ -120,12 +121,12 @@ export const BountyCard: React.FC<BountyCardProps> = ({
           <div className="flex items-center justify-between mb-2">
             <div>
               <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Escrow Reward</span>
-              <span className="text-xl font-black text-emerald-400 tracking-tight">{task.escrow_amount} GEN</span>
+              <span className="text-xl font-black text-emerald-400 tracking-tight">{formatGenAmount(task.escrow_amount)} GEN</span>
             </div>
             <div className="text-right">
               <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Mandatory 20% Stake</span>
               <span className="text-sm font-bold text-amber-300">
-                {task.contributor_stake !== '0' ? `${task.contributor_stake} GEN` : `${minStakeRequired} GEN`}
+                {task.contributor_stake !== '0' ? `${formatGenAmount(task.contributor_stake)} GEN` : `${formatGenAmount(minStakeRequired)} GEN`}
               </span>
             </div>
           </div>
@@ -221,7 +222,7 @@ export const BountyCard: React.FC<BountyCardProps> = ({
               onClick={() => onAccept(task.id, minStakeRequired)}
               className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-emerald-glow transition-all active:scale-95 flex items-center gap-1"
             >
-              <span>Accept ({minStakeRequired} GEN)</span>
+              <span>Accept ({formatGenAmount(minStakeRequired)} GEN)</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
             </button>
           )}

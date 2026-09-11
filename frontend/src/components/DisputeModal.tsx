@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ShieldAlert, X, AlertTriangle } from 'lucide-react';
 import { DatasetTask } from '../types/bounty';
+import { formatGenAmount } from '../config/genlayer';
 
 interface DisputeModalProps {
   task: DatasetTask | null;
@@ -56,7 +57,7 @@ export const DisputeModal: React.FC<DisputeModalProps> = ({
           </div>
           <div className="flex justify-between text-slate-400">
             <span>Escrow Reward:</span>
-            <span className="text-white font-bold">{task.escrow_amount} GEN</span>
+            <span className="text-white font-bold">{formatGenAmount(task.escrow_amount)} GEN</span>
           </div>
         </div>
 

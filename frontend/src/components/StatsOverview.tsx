@@ -1,13 +1,17 @@
 import React from 'react';
 import { Database, Lock, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { DatasetTask } from '../types/bounty';
+import { formatGenAmount } from '../config/genlayer';
 
 interface StatsOverviewProps {
   tasks: DatasetTask[];
 }
 
 export const StatsOverview: React.FC<StatsOverviewProps> = ({ tasks }) => {
-  const totalEscrow = tasks.reduce((sum, t) => sum + Number(t.escrow_amount || 0), 0);
+  const totalEscrow = tasks.reduce((sum, t) => {
+    const val = parseFloat(formatGenAmount(t.escrow_amount || '0'));
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
   const activeBounties = tasks.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length;
   const awaitingPayout = tasks.filter(t => t.status === 'AWAITING_PAYOUT').length;
   const activeDisputes = tasks.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length;

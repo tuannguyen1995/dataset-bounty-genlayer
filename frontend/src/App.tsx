@@ -9,7 +9,9 @@ import {
   executeContractWrite, 
   getContractAddress,
   ensureCorrectNetwork,
-  CONTRACT_ADDRESS 
+  CONTRACT_ADDRESS,
+  parseGenAmount,
+  formatGenAmount 
 } from './config/genlayer';
 import { Header } from './components/Header';
 import { BountyCard } from './components/BountyCard';
@@ -169,7 +171,7 @@ export function App() {
       await connectWallet();
       return;
     }
-    const escrowWei = BigInt(data.escrowAmount);
+    const escrowWei = parseGenAmount(data.escrowAmount);
     const ok = await handleContractAction(
       'create_bounty',
       [data.taskId, data.specUrl, data.specHash, data.requiredFormat, data.blacklistSources],
@@ -188,7 +190,7 @@ export function App() {
       'accept_bounty',
       [taskId],
       stakeWei,
-      `Bounty "${taskId}" accepted with ${minStake} GEN stake!`
+      `Bounty "${taskId}" accepted with ${formatGenAmount(minStake)} GEN stake!`
     );
   };
 
@@ -249,7 +251,10 @@ export function App() {
 
   // Metrics derived strictly when tasks is valid array
   const activeTaskList = tasks || [];
-  const totalEscrow = activeTaskList.reduce((sum, t) => sum + Number(t.escrow_amount || 0), 0);
+  const totalEscrow = activeTaskList.reduce((sum, t) => {
+    const val = parseFloat(formatGenAmount(t.escrow_amount || '0'));
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
   const activeBounties = activeTaskList.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length;
   const coolingOffCount = activeTaskList.filter(t => t.status === 'AWAITING_PAYOUT').length;
   const activeDisputes = activeTaskList.filter(t => t.status === 'DISPUTED' || t.status === 'ESCALATED').length;

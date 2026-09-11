@@ -201,9 +201,19 @@ export async function executeContractWrite(
     statusStr === 'success' || 
     statusStr === 'accepted' || 
     statusStr === 'finalized' || 
+    statusStr === 'ready_to_finalize' || 
     statusStr === '1' || 
     statusStr === '0x1' || 
+    statusStr === '5' || 
+    statusStr === '0x5' || 
+    statusStr === '7' || 
+    statusStr === '0x7' || 
+    statusStr === '11' || 
+    statusStr === '0xb' || 
     receipt.status === 1 || 
+    receipt.status === 5 || 
+    receipt.status === 7 || 
+    receipt.status === 11 || 
     receipt.status === true;
 
   if (!isConfirmedSuccess || receipt.reverted === true || receipt.error) {
@@ -214,3 +224,42 @@ export async function executeContractWrite(
   // Step 4: Authoritative re-fetch directly from contract
   return await fetchAllTasks(contractAddress);
 }
+
+/**
+ * Convert human-entered GEN string (e.g. "100" or "0.5") to 18-decimal Wei BigInt
+ */
+export function parseGenAmount(amountStr: string | number): bigint {
+  const str = String(amountStr || '0').trim();
+  if (!str || str === '0') return BigInt(0);
+
+  const [wholePart, decPart = ''] = str.split('.');
+  const whole = BigInt(wholePart || '0') * BigInt(10 ** 18);
+  const cleanDec = decPart.slice(0, 18).padEnd(18, '0');
+  const fraction = BigInt(cleanDec || '0');
+
+  return whole + fraction;
+}
+
+/**
+ * Format 18-decimal Wei BigInt (or legacy small amounts) into a clean, human-readable GEN string
+ */
+export function formatGenAmount(amountWei: string | number | bigint): string {
+  try {
+    const b = BigInt(amountWei || '0');
+    if (b === BigInt(0)) return '0';
+
+    // If amount >= 10^14 (at least 0.0001 GEN in 18 decimals)
+    if (b >= BigInt(10 ** 14)) {
+      const whole = b / BigInt(10 ** 18);
+      const remainder = b % BigInt(10 ** 18);
+      if (remainder === BigInt(0)) return whole.toString();
+      const decStr = remainder.toString().padStart(18, '0').slice(0, 4).replace(/0+$/, '');
+      return decStr ? `${whole}.${decStr}` : whole.toString();
+    }
+    // Fallback for smaller amounts or legacy test data (e.g. "100")
+    return b.toString();
+  } catch {
+    return String(amountWei || '0');
+  }
+}
+

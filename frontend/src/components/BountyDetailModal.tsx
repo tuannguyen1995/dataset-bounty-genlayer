@@ -4,6 +4,7 @@ import {
   XCircle, AlertTriangle, ShieldAlert, X, Eye, Zap, RefreshCw, Send 
 } from 'lucide-react';
 import { DatasetTask } from '../types/bounty';
+import { formatGenAmount } from '../config/genlayer';
 
 interface BountyDetailModalProps {
   task: DatasetTask | null;
@@ -72,11 +73,11 @@ export const BountyDetailModal: React.FC<BountyDetailModalProps> = ({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
             <span className="text-[10px] text-slate-400 uppercase">Escrow Reward</span>
-            <div className="text-base font-extrabold text-cyan-400">{task.escrow_amount} GEN</div>
+            <div className="text-base font-extrabold text-cyan-400">{formatGenAmount(task.escrow_amount)} GEN</div>
           </div>
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
             <span className="text-[10px] text-slate-400 uppercase">Contributor Stake</span>
-            <div className="text-base font-extrabold text-violet-300">{task.contributor_stake} GEN</div>
+            <div className="text-base font-extrabold text-violet-300">{formatGenAmount(task.contributor_stake)} GEN</div>
           </div>
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
             <span className="text-[10px] text-slate-400 uppercase">Status</span>
